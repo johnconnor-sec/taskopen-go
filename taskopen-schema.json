@@ -1,0 +1,210 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "description": "Configuration schema for taskopen task annotation opener",
+  "properties": {
+    "actions": {
+      "description": "Action definitions for opening task annotations",
+      "items": {
+        "additionalProperties": false,
+        "description": "A single action configuration",
+        "properties": {
+          "command": {
+            "description": "Command to execute when action matches",
+            "minLength": 1,
+            "type": "string"
+          },
+          "filtercommand": {
+            "default": "",
+            "description": "Command to filter matches before execution",
+            "type": "string"
+          },
+          "inlinecommand": {
+            "default": "",
+            "description": "Command to execute inline with task display",
+            "type": "string"
+          },
+          "labelregex": {
+            "default": ".*",
+            "description": "Regular expression for annotation labels",
+            "type": "string"
+          },
+          "modes": {
+            "default": [
+              "batch",
+              "any",
+              "normal"
+            ],
+            "description": "Modes in which this action is available",
+            "items": {
+              "enum": [
+                "batch",
+                "any",
+                "normal"
+              ],
+              "type": "string"
+            },
+            "minItems": 1,
+            "type": "array",
+            "uniqueItems": true
+          },
+          "name": {
+            "description": "Unique name for this action",
+            "minLength": 1,
+            "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$",
+            "type": "string"
+          },
+          "regex": {
+            "default": ".*",
+            "description": "Regular expression pattern to match",
+            "type": "string"
+          },
+          "target": {
+            "default": "annotations",
+            "description": "Where to look for matches",
+            "enum": [
+              "annotations",
+              "description"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "target",
+          "command"
+        ],
+        "type": "object"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "cli": {
+      "additionalProperties": false,
+      "description": "CLI-specific configuration",
+      "properties": {
+        "aliases": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Command aliases",
+          "type": "object"
+        },
+        "default_subcommand": {
+          "default": "normal",
+          "description": "Default subcommand when none specified",
+          "enum": [
+            "batch",
+            "any",
+            "normal"
+          ],
+          "type": "string"
+        },
+        "groups": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Action groups",
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "config_version": {
+      "default": "2.0",
+      "description": "Configuration format version",
+      "type": "string"
+    },
+    "general": {
+      "additionalProperties": false,
+      "description": "General taskopen settings",
+      "properties": {
+        "base_filter": {
+          "default": "+PENDING",
+          "description": "Base filter for task queries",
+          "examples": [
+            "+PENDING",
+            "+READY",
+            "status:pending"
+          ],
+          "type": "string"
+        },
+        "debug": {
+          "default": false,
+          "description": "Enable debug output",
+          "type": "boolean"
+        },
+        "editor": {
+          "default": "vim",
+          "description": "Editor command for editing notes and files",
+          "examples": [
+            "vim",
+            "nano",
+            "code",
+            "emacs"
+          ],
+          "type": "string"
+        },
+        "no_annotation_hook": {
+          "default": "addnote $ID",
+          "description": "Command to run for tasks without annotations",
+          "type": "string"
+        },
+        "path_ext": {
+          "default": "",
+          "description": "Path extension for file operations",
+          "type": "string"
+        },
+        "sort": {
+          "default": "urgency-,annot",
+          "description": "Default task sort order",
+          "examples": [
+            "urgency-",
+            "due+",
+            "priority-,urgency-"
+          ],
+          "type": "string"
+        },
+        "task_attributes": {
+          "default": "priority,project,tags,description",
+          "description": "Task attributes to display in output",
+          "examples": [
+            "priority,project,tags,description",
+            "urgency,project,description",
+            "id,description,due"
+          ],
+          "type": "string"
+        },
+        "taskargs": {
+          "default": [],
+          "description": "Additional arguments to pass to taskwarrior",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "taskbin": {
+          "default": "task",
+          "description": "Path to taskwarrior binary",
+          "examples": [
+            "task",
+            "/usr/bin/task",
+            "/usr/local/bin/task"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "editor",
+        "taskbin"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "general",
+    "actions"
+  ],
+  "title": "Taskopen Configuration",
+  "type": "object"
+}
