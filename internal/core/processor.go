@@ -142,10 +142,6 @@ func (tp *TaskProcessor) getTasksFromTaskwarrior(ctx context.Context, filters []
 		return nil, fmt.Errorf("no result from taskwarrior execution")
 	}
 
-	if result == nil {
-		return nil, fmt.Errorf("no result from taskwarrior execution")
-	}
-
 	if result.ExitCode != 0 {
 		tp.logger.Error("Taskwarrior export failed", map[string]any{
 			"exit_code": result.ExitCode,
