@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/johnconnor-sec/taskopen-go/internal/errors"
-	"github.com/johnconnor-sec/taskopen-go/internal/exec"
+	"github.com/johnconnor-sec/taskopen-go/taskopen/internal/errors"
+	"github.com/johnconnor-sec/taskopen-go/taskopen/internal/exec"
 )
 
 // DefaultArgs are the default arguments passed to taskwarrior commands.
@@ -130,7 +130,7 @@ func (c *Client) CurrentContext(ctx context.Context) (string, error) {
 	contextRegex1 := regexp.MustCompile(`.*with filter '(.*)' is currently applied\.$`)
 	contextRegex2 := regexp.MustCompile(`.*read filter: '(.*)'$`)
 
-	for line := range strings.SplitSeq(result.Stdout, "\n") {
+	for _, line := range strings.Split(result.Stdout, "\n") {
 		if matches := contextRegex1.FindStringSubmatch(line); matches != nil {
 			return fmt.Sprintf("\\(%s\\)", matches[1]), nil
 		}
@@ -209,8 +209,8 @@ func (c *Client) ExportStream(ctx context.Context, filters []string) (<-chan Tas
 				}
 
 				// Remove prefix if present (from streaming)
-				if after, ok0 := strings.CutPrefix(line, "[stdout] "); ok0 {
-					line = after
+				if strings.HasPrefix(line, "[stdout] ") {
+					line = strings.TrimPrefix(line, "[stdout] ")
 				}
 
 				// Buffer the line for JSON parsing

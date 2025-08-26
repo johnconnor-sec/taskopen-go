@@ -9,11 +9,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/johnconnor-sec/taskopen-go/internal/config"
-	"github.com/johnconnor-sec/taskopen-go/internal/errors"
-	"github.com/johnconnor-sec/taskopen-go/internal/exec"
-	"github.com/johnconnor-sec/taskopen-go/internal/taskwarrior"
-	"github.com/johnconnor-sec/taskopen-go/internal/types"
+	"github.com/johnconnor-sec/taskopen-go/taskopen/internal/config"
+	"github.com/johnconnor-sec/taskopen-go/taskopen/internal/errors"
+	"github.com/johnconnor-sec/taskopen-go/taskopen/internal/exec"
+	"github.com/johnconnor-sec/taskopen-go/taskopen/internal/taskwarrior"
+	"github.com/johnconnor-sec/taskopen-go/taskopen/internal/types"
 )
 
 // TaskOpen provides the main application functionality.
@@ -76,7 +76,7 @@ func (to *TaskOpen) VerifySetup(ctx context.Context) error {
 	if to.config.General.Editor != "" {
 		editorParts := strings.Fields(to.config.General.Editor)
 		if len(editorParts) > 0 {
-			_, err := to.executor.ExecuteFilter(ctx, "which", []string{"-v", editorParts[0]}, nil)
+			_, err := to.executor.ExecuteFilter(ctx, "command", []string{"-v", editorParts[0]}, nil)
 			if err != nil {
 				return errors.New(errors.ActionExecution, "Editor not found").
 					WithDetails(fmt.Sprintf("Editor: %s", to.config.General.Editor)).
@@ -317,6 +317,7 @@ func (to *TaskOpen) executeFilterCommand(ctx context.Context, command string, en
 		Environment: env,
 		Timeout:     10 * time.Second, // Shorter timeout for filters
 	})
+
 	if err != nil {
 		return false, err
 	}
@@ -359,6 +360,7 @@ func (to *TaskOpen) executeInlineCommand(ctx context.Context, command string, en
 		CaptureOutput: true,
 		Timeout:       30 * time.Second,
 	})
+
 	if err != nil {
 		return err
 	}

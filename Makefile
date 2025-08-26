@@ -1,7 +1,7 @@
 # Taskopen Go Version - Makefile
 # Development workflow automation
 
-.PHONY: help build test clean install lint fmt deps security coverage dev-setup
+.PHONY: help run build test clean install lint fmt deps security coverage dev-setup
 
 # Build configuration
 BINARY_NAME=taskopen

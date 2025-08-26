@@ -1,0 +1,96 @@
+package main
+
+import (
+	"bufio"
+	"fmt"
+	"os"
+	"strings"
+	"time"
+	"unicode/utf8"
+)
+
+func readLine(reader *bufio.Reader) (string, error) {
+	line, err := reader.ReadString('\n')
+	return strings.TrimSpace(line), err
+}
+
+func testBufferIssues() {
+	fmt.Println("\n=== Testing Buffer Issues ===")
+	reader := bufio.NewReader(os.Stdin)
+
+	fmt.Print("Enter multiple characters quickly: ")
+	start := time.Now()
+	result, err := readLine(reader)
+	elapsed := time.Since(start)
+
+	fmt.Printf("Result: '%s'\n", result)
+	fmt.Printf("Length: %d\n", len(result))
+	fmt.Printf("Time taken: %v\n", elapsed)
+	fmt.Printf("Error: %v\n", err)
+	fmt.Printf("Raw bytes: %v\n", []byte(result))
+}
+
+func testCharacterEncoding() {
+	fmt.Println("\n=== Testing Character Encoding ===")
+	reader := bufio.NewReader(os.Stdin)
+
+	fmt.Print("Enter special characters (emoji, unicode, etc.): ")
+	result, err := readLine(reader)
+
+	fmt.Printf("Result: '%s'\n", result)
+	fmt.Printf("Length (bytes): %d\n", len(result))
+	fmt.Printf("Length (runes): %d\n", utf8.RuneCountInString(result))
+	fmt.Printf("Error: %v\n", err)
+	fmt.Printf("Raw bytes: %v\n", []byte(result))
+	fmt.Printf("Valid UTF-8: %v\n", utf8.ValidString(result))
+
+	// Print each rune
+	for i, r := range result {
+		fmt.Printf("  Rune %d: %c (U+%04X)\n", i, r, r)
+	}
+}
+
+func testTimingIssues() {
+	fmt.Println("\n=== Testing Timing Issues ===")
+	reader := bufio.NewReader(os.Stdin)
+
+	fmt.Print("Type 'fast' as quickly as possible: ")
+	start := time.Now()
+	result, err := readLine(reader)
+	elapsed := time.Since(start)
+
+	fmt.Printf("Result: '%s'\n", result)
+	fmt.Printf("Expected: 'fast'\n")
+	fmt.Printf("Match: %v\n", result == "fast")
+	fmt.Printf("Time taken: %v\n", elapsed)
+	fmt.Printf("Characters per second: %.2f\n", float64(len(result))/elapsed.Seconds())
+	fmt.Printf("Error: %v\n", err)
+}
+
+func testEnvironmentIssues() {
+	fmt.Println("\n=== Testing Environment Issues ===")
+	fmt.Printf("TERM: %s\n", os.Getenv("TERM"))
+	fmt.Printf("LANG: %s\n", os.Getenv("LANG"))
+	fmt.Printf("LC_ALL: %s\n", os.Getenv("LC_ALL"))
+	fmt.Printf("SHELL: %s\n", os.Getenv("SHELL"))
+
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Print("Press Enter to test line ending handling: ")
+	result, err := readLine(reader)
+
+	fmt.Printf("Result length: %d\n", len(result))
+	fmt.Printf("Error: %v\n", err)
+	fmt.Printf("Raw bytes: %v\n", []byte(result))
+}
+
+func main() {
+	fmt.Println("Comprehensive Interactive Input Testing")
+	fmt.Println("======================================")
+
+	testCharacterEncoding()
+	testBufferIssues()
+	testTimingIssues()
+	testEnvironmentIssues()
+
+	fmt.Println("\n=== All tests completed ===")
+}

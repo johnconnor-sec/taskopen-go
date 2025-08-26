@@ -1,0 +1,447 @@
+package ui
+
+import (
+	"fmt"
+	"io"
+	"os"
+	"strings"
+
+	"github.com/johnconnor-sec/taskopen-go/taskopen/internal/output"
+	"github.com/johnconnor-sec/taskopen-go/taskopen/internal/search"
+)
+
+// KeyCode represents keyboard input codes
+type KeyCode int
+
+const (
+	KeyEnter KeyCode = iota
+	KeyEscape
+	KeyUp
+	KeyDown
+	KeyLeft
+	KeyRight
+	KeyTab
+	KeyBackspace
+	KeyDelete
+	KeyHome
+	KeyEnd
+	KeyPageUp
+	KeyPageDown
+	KeyChar // For regular character input
+)
+
+// KeyEvent represents a keyboard event
+type KeyEvent struct {
+	Code KeyCode
+	Char rune
+	Alt  bool
+	Ctrl bool
+}
+
+// MenuItem represents a menu item
+type MenuItem struct {
+	ID          string
+	Text        string
+	Description string
+	Action      func() error
+	Disabled    bool
+	Data        interface{}
+}
+
+// MenuConfig configures menu behavior and appearance
+type MenuConfig struct {
+	Title           string
+	Prompt          string
+	ShowDescription bool
+	AllowSearch     bool
+	MaxItems        int
+	MinScore        float64
+	CaseSensitive   bool
+	PreviewFunc     func(item MenuItem) string
+}
+
+// DefaultMenuConfig returns sensible defaults
+func DefaultMenuConfig() MenuConfig {
+	return MenuConfig{
+		Title:           "Select an option",
+		Prompt:          "> ",
+		ShowDescription: true,
+		AllowSearch:     true,
+		MaxItems:        10,
+		MinScore:        0.1,
+		CaseSensitive:   false,
+	}
+}
+
+// Menu represents an interactive menu
+type Menu struct {
+	config    MenuConfig
+	items     []MenuItem
+	filtered  []MenuItem
+	selected  int
+	query     string
+	formatter *output.Formatter
+	fuzzy     *search.Fuzzy
+	input     io.Reader
+	output    io.Writer
+}
+
+// NewMenu creates a new interactive menu
+func NewMenu(items []MenuItem, config MenuConfig) *Menu {
+	fuzzy := search.NewFuzzy().
+		SetCaseSensitive(config.CaseSensitive).
+		SetMinScore(config.MinScore)
+
+	menu := &Menu{
+		config:    config,
+		items:     items,
+		filtered:  items,
+		selected:  0,
+		query:     "",
+		formatter: output.NewFormatter(os.Stdout),
+		fuzzy:     fuzzy,
+		input:     os.Stdin,
+		output:    os.Stdout,
+	}
+
+	return menu
+}
+
+// SetInput sets the input reader for testing
+func (m *Menu) SetInput(r io.Reader) {
+	m.input = r
+}
+
+// SetOutput sets the output writer for testing
+func (m *Menu) SetOutput(w io.Writer) {
+	m.output = w
+	m.formatter = output.NewFormatter(w)
+}
+
+// Show displays the menu and handles user interaction
+func (m *Menu) Show() (*MenuItem, error) {
+	// Set up terminal for raw input (simplified for demo)
+	// In a real implementation, we'd use a proper terminal library
+
+	for {
+		m.render()
+
+		// Get user input (simplified - in reality we'd handle raw terminal input)
+		key, err := m.getKey()
+		if err != nil {
+			return nil, err
+		}
+
+		switch key.Code {
+		case KeyEscape:
+			return nil, nil // User cancelled
+		case KeyEnter:
+			if len(m.filtered) > 0 && m.selected < len(m.filtered) {
+				item := &m.filtered[m.selected]
+				return item, nil
+			}
+		case KeyUp:
+			m.moveSelection(-1)
+		case KeyDown:
+			m.moveSelection(1)
+		case KeyBackspace:
+			if len(m.query) > 0 {
+				m.query = m.query[:len(m.query)-1]
+				m.updateFilter()
+			}
+		case KeyChar:
+			if m.config.AllowSearch {
+				m.query += string(key.Char)
+				m.updateFilter()
+			}
+		}
+	}
+}
+
+// render displays the current menu state
+func (m *Menu) render() {
+	// Clear screen (simplified)
+	fmt.Fprint(m.output, "\033[2J\033[H")
+
+	// Show title
+	m.formatter.Header(m.config.Title)
+
+	// Show search query if applicable
+	if m.config.AllowSearch {
+		if m.query != "" {
+			m.formatter.Info("Search: %s", m.query)
+		} else {
+			m.formatter.Info("Type to search...")
+		}
+		fmt.Fprintln(m.output)
+	}
+
+	// Show items
+	displayCount := m.config.MaxItems
+	if len(m.filtered) < displayCount {
+		displayCount = len(m.filtered)
+	}
+
+	if len(m.filtered) == 0 {
+		m.formatter.Warning("No items found")
+		return
+	}
+
+	for i := 0; i < displayCount; i++ {
+		item := m.filtered[i]
+
+		// Format item
+		marker := "  "
+		if i == m.selected {
+			marker = "→ "
+		}
+
+		line := fmt.Sprintf("%s%s", marker, item.Text)
+
+		if item.Disabled {
+			// Use muted formatting for disabled items
+			line = "  " + line // Simple implementation without direct colorize access
+		} else if i == m.selected {
+			// Highlight selected item
+			line = "► " + line
+		}
+
+		fmt.Fprintln(m.output, line)
+
+		// Show description if enabled and item is selected
+		if m.config.ShowDescription && i == m.selected && item.Description != "" {
+			desc := "    " + item.Description
+			fmt.Fprintln(m.output, desc)
+		}
+	}
+
+	// Show preview if available
+	if m.config.PreviewFunc != nil && len(m.filtered) > 0 && m.selected < len(m.filtered) {
+		fmt.Fprintln(m.output)
+		m.formatter.Subheader("Preview")
+		preview := m.config.PreviewFunc(m.filtered[m.selected])
+		fmt.Fprintln(m.output, preview)
+	}
+
+	// Show help
+	fmt.Fprintln(m.output)
+	help := "↑/↓ Navigate • Enter Select • Esc Cancel"
+	if m.config.AllowSearch {
+		help += " • Type to search"
+	}
+	fmt.Fprintln(m.output, help)
+}
+
+// moveSelection moves the selection up or down
+func (m *Menu) moveSelection(delta int) {
+	if len(m.filtered) == 0 {
+		return
+	}
+
+	m.selected += delta
+
+	if m.selected < 0 {
+		m.selected = len(m.filtered) - 1
+	}
+	if m.selected >= len(m.filtered) {
+		m.selected = 0
+	}
+
+	// Skip disabled items
+	startSelected := m.selected
+	for m.filtered[m.selected].Disabled {
+		m.selected += delta
+		if m.selected < 0 {
+			m.selected = len(m.filtered) - 1
+		}
+		if m.selected >= len(m.filtered) {
+			m.selected = 0
+		}
+
+		// Prevent infinite loop if all items are disabled
+		if m.selected == startSelected {
+			break
+		}
+	}
+}
+
+// updateFilter updates the filtered items based on search query
+func (m *Menu) updateFilter() {
+	if m.query == "" {
+		m.filtered = m.items
+	} else {
+		// Convert items to searchable format
+		texts := make([]string, len(m.items))
+		for i, item := range m.items {
+			texts[i] = item.Text
+		}
+
+		// Perform fuzzy search
+		matches := m.fuzzy.Search(m.query, texts)
+
+		// Convert matches back to menu items
+		m.filtered = make([]MenuItem, 0, len(matches))
+		for _, match := range matches {
+			// Find original item
+			for _, item := range m.items {
+				if item.Text == match.Text {
+					m.filtered = append(m.filtered, item)
+					break
+				}
+			}
+		}
+	}
+
+	// Reset selection
+	m.selected = 0
+	if len(m.filtered) > 0 {
+		// Find first non-disabled item
+		for i, item := range m.filtered {
+			if !item.Disabled {
+				m.selected = i
+				break
+			}
+		}
+	}
+}
+
+// getKey reads a key from input (simplified implementation)
+func (m *Menu) getKey() (KeyEvent, error) {
+	// This is a simplified implementation for demonstration
+	// A real implementation would use proper terminal handling
+
+	var input string
+	fmt.Fprint(m.output, "\n> ")
+	_, err := fmt.Fscanf(m.input, "%s", &input)
+	if err != nil {
+		return KeyEvent{}, err
+	}
+
+	input = strings.TrimSpace(input)
+
+	// Map simple commands
+	switch input {
+	case "q", "quit", "exit":
+		return KeyEvent{Code: KeyEscape}, nil
+	case "enter", "select", "":
+		return KeyEvent{Code: KeyEnter}, nil
+	case "up", "u":
+		return KeyEvent{Code: KeyUp}, nil
+	case "down", "d":
+		return KeyEvent{Code: KeyDown}, nil
+	case "clear":
+		return KeyEvent{Code: KeyBackspace}, nil
+	default:
+		// Treat as search input
+		if len(input) > 0 {
+			return KeyEvent{Code: KeyChar, Char: rune(input[0])}, nil
+		}
+		return KeyEvent{Code: KeyChar, Char: ' '}, nil
+	}
+}
+
+// ShowSimpleMenu shows a simplified menu for non-interactive environments
+func ShowSimpleMenu(items []MenuItem, title string) (*MenuItem, error) {
+	formatter := output.NewFormatter(os.Stdout)
+
+	formatter.Header(title)
+
+	// Show numbered options
+	for i, item := range items {
+		if item.Disabled {
+			continue
+		}
+
+		marker := fmt.Sprintf("%d.", i+1)
+		line := fmt.Sprintf("%-3s %s", marker, item.Text)
+
+		if item.Description != "" {
+			line += fmt.Sprintf(" - %s", item.Description)
+		}
+
+		formatter.List("%s", line)
+	}
+
+	fmt.Println()
+	fmt.Print("Select option (number): ")
+
+	var choice int
+	_, err := fmt.Scanf("%d", &choice)
+	if err != nil {
+		return nil, fmt.Errorf("invalid input: %w", err)
+	}
+
+	choice-- // Convert to 0-based index
+	if choice < 0 || choice >= len(items) || items[choice].Disabled {
+		return nil, fmt.Errorf("invalid selection")
+	}
+
+	return &items[choice], nil
+}
+
+// MultiSelect allows multiple item selection
+type MultiSelect struct {
+	menu     *Menu
+	selected map[int]bool
+}
+
+// NewMultiSelect creates a new multi-select menu
+func NewMultiSelect(items []MenuItem, config MenuConfig) *MultiSelect {
+	return &MultiSelect{
+		menu:     NewMenu(items, config),
+		selected: make(map[int]bool),
+	}
+}
+
+// Show displays the multi-select menu
+func (ms *MultiSelect) Show() ([]MenuItem, error) {
+	// Implementation would be similar to Menu.Show() but with space to toggle selection
+	// For now, return single selection
+	item, err := ms.menu.Show()
+	if err != nil || item == nil {
+		return nil, err
+	}
+	return []MenuItem{*item}, nil
+}
+
+// CreateActionsMenu creates a menu for taskopen actions
+func CreateActionsMenu(actions map[string]interface{}) []MenuItem {
+	var items []MenuItem
+
+	for name, action := range actions {
+		items = append(items, MenuItem{
+			ID:          name,
+			Text:        name,
+			Description: fmt.Sprintf("Action: %v", action),
+			Data:        action,
+		})
+	}
+
+	return items
+}
+
+// CreateTaskMenu creates a menu for taskwarrior tasks
+func CreateTaskMenu(tasks []map[string]interface{}) []MenuItem {
+	var items []MenuItem
+
+	for i, task := range tasks {
+		description := "No description"
+		if desc, ok := task["description"].(string); ok {
+			description = desc
+		}
+
+		status := "pending"
+		if s, ok := task["status"].(string); ok {
+			status = s
+		}
+
+		items = append(items, MenuItem{
+			ID:          fmt.Sprintf("task-%d", i),
+			Text:        description,
+			Description: fmt.Sprintf("Status: %s", status),
+			Data:        task,
+		})
+	}
+
+	return items
+}

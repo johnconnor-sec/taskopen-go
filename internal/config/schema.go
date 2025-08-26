@@ -9,57 +9,57 @@ import (
 
 // JSONSchema generates a JSON schema for the taskopen configuration.
 func GenerateJSONSchema() ([]byte, error) {
-	schema := map[string]interface{}{
+	schema := map[string]any{
 		"$schema":              "http://json-schema.org/draft-07/schema#",
 		"title":                "Taskopen Configuration",
 		"description":          "Configuration schema for taskopen task annotation opener",
 		"type":                 "object",
 		"additionalProperties": false,
 
-		"properties": map[string]interface{}{
-			"config_version": map[string]interface{}{
+		"properties": map[string]any{
+			"config_version": map[string]any{
 				"type":        "string",
 				"description": "Configuration format version",
 				"default":     "2.0",
 			},
 
-			"general": map[string]interface{}{
+			"general": map[string]any{
 				"type":                 "object",
 				"description":          "General taskopen settings",
 				"required":             []string{"editor", "taskbin"},
 				"additionalProperties": false,
 
-				"properties": map[string]interface{}{
-					"editor": map[string]interface{}{
+				"properties": map[string]any{
+					"editor": map[string]any{
 						"type":        "string",
 						"description": "Editor command for editing notes and files",
 						"default":     "vim",
 						"examples":    []string{"vim", "nano", "code", "emacs"},
 					},
 
-					"taskbin": map[string]interface{}{
+					"taskbin": map[string]any{
 						"type":        "string",
 						"description": "Path to taskwarrior binary",
 						"default":     "task",
 						"examples":    []string{"task", "/usr/bin/task", "/usr/local/bin/task"},
 					},
 
-					"taskargs": map[string]interface{}{
+					"taskargs": map[string]any{
 						"type":        "array",
 						"description": "Additional arguments to pass to taskwarrior",
-						"items": map[string]interface{}{
+						"items": map[string]any{
 							"type": "string",
 						},
-						"default": []interface{}{},
+						"default": []any{},
 					},
 
-					"path_ext": map[string]interface{}{
+					"path_ext": map[string]any{
 						"type":        "string",
 						"description": "Path extension for file operations",
 						"default":     "",
 					},
 
-					"task_attributes": map[string]interface{}{
+					"task_attributes": map[string]any{
 						"type":        "string",
 						"description": "Task attributes to display in output",
 						"default":     "priority,project,tags,description",
@@ -70,27 +70,27 @@ func GenerateJSONSchema() ([]byte, error) {
 						},
 					},
 
-					"no_annotation_hook": map[string]interface{}{
+					"no_annotation_hook": map[string]any{
 						"type":        "string",
 						"description": "Command to run for tasks without annotations",
 						"default":     "addnote $ID",
 					},
 
-					"sort": map[string]interface{}{
+					"sort": map[string]any{
 						"type":        "string",
 						"description": "Default task sort order",
 						"default":     "urgency-,annot",
 						"examples":    []string{"urgency-", "due+", "priority-,urgency-"},
 					},
 
-					"base_filter": map[string]interface{}{
+					"base_filter": map[string]any{
 						"type":        "string",
 						"description": "Base filter for task queries",
 						"default":     "+PENDING",
 						"examples":    []string{"+PENDING", "+READY", "status:pending"},
 					},
 
-					"debug": map[string]interface{}{
+					"debug": map[string]any{
 						"type":        "boolean",
 						"description": "Enable debug output",
 						"default":     false,
@@ -98,69 +98,69 @@ func GenerateJSONSchema() ([]byte, error) {
 				},
 			},
 
-			"actions": map[string]interface{}{
+			"actions": map[string]any{
 				"type":        "array",
 				"description": "Action definitions for opening task annotations",
 				"minItems":    1,
 
-				"items": map[string]interface{}{
+				"items": map[string]any{
 					"type":                 "object",
 					"description":          "A single action configuration",
 					"required":             []string{"name", "target", "command"},
 					"additionalProperties": false,
 
-					"properties": map[string]interface{}{
-						"name": map[string]interface{}{
+					"properties": map[string]any{
+						"name": map[string]any{
 							"type":        "string",
 							"description": "Unique name for this action",
 							"minLength":   1,
 							"pattern":     "^[a-zA-Z][a-zA-Z0-9_-]*$",
 						},
 
-						"target": map[string]interface{}{
+						"target": map[string]any{
 							"type":        "string",
 							"description": "Where to look for matches",
 							"enum":        []string{"annotations", "description"},
 							"default":     "annotations",
 						},
 
-						"regex": map[string]interface{}{
+						"regex": map[string]any{
 							"type":        "string",
 							"description": "Regular expression pattern to match",
 							"default":     ".*",
 						},
 
-						"labelregex": map[string]interface{}{
+						"labelregex": map[string]any{
 							"type":        "string",
 							"description": "Regular expression for annotation labels",
 							"default":     ".*",
 						},
 
-						"command": map[string]interface{}{
+						"command": map[string]any{
 							"type":        "string",
 							"description": "Command to execute when action matches",
 							"minLength":   1,
 						},
 
-						"modes": map[string]interface{}{
+						"modes": map[string]any{
 							"type":        "array",
 							"description": "Modes in which this action is available",
-							"items": map[string]interface{}{
+							"items": map[string]any{
 								"type": "string",
 								"enum": []string{"batch", "any", "normal"},
 							},
-							"default":     []interface{}{"batch", "any", "normal"},
+							"default":     []any{"batch", "any", "normal"},
 							"minItems":    1,
 							"uniqueItems": true,
 						},
 
-						"filtercommand": map[string]interface{}{
+						"filtercommand": map[string]any{
 							"type":        "string",
 							"description": "Command to filter matches before execution",
 							"default":     "",
 						},
 
-						"inlinecommand": map[string]interface{}{
+						"inlinecommand": map[string]any{
 							"type":        "string",
 							"description": "Command to execute inline with task display",
 							"default":     "",
@@ -169,31 +169,31 @@ func GenerateJSONSchema() ([]byte, error) {
 				},
 			},
 
-			"cli": map[string]interface{}{
+			"cli": map[string]any{
 				"type":                 "object",
 				"description":          "CLI-specific configuration",
 				"additionalProperties": false,
 
-				"properties": map[string]interface{}{
-					"default_subcommand": map[string]interface{}{
+				"properties": map[string]any{
+					"default_subcommand": map[string]any{
 						"type":        "string",
 						"description": "Default subcommand when none specified",
 						"default":     "normal",
 						"enum":        []string{"batch", "any", "normal"},
 					},
 
-					"aliases": map[string]interface{}{
+					"aliases": map[string]any{
 						"type":        "object",
 						"description": "Command aliases",
-						"additionalProperties": map[string]interface{}{
+						"additionalProperties": map[string]any{
 							"type": "string",
 						},
 					},
 
-					"groups": map[string]interface{}{
+					"groups": map[string]any{
 						"type":        "object",
 						"description": "Action groups",
-						"additionalProperties": map[string]interface{}{
+						"additionalProperties": map[string]any{
 							"type": "string",
 						},
 					},
@@ -222,14 +222,14 @@ func SaveJSONSchema(filePath string) error {
 }
 
 // GetSchemaExamples returns example configurations for documentation.
-func GetSchemaExamples() map[string]interface{} {
-	return map[string]interface{}{
-		"minimal": map[string]interface{}{
-			"general": map[string]interface{}{
+func GetSchemaExamples() map[string]any {
+	return map[string]any{
+		"minimal": map[string]any{
+			"general": map[string]any{
 				"editor":  "vim",
 				"taskbin": "task",
 			},
-			"actions": []map[string]interface{}{
+			"actions": []map[string]any{
 				{
 					"name":    "files",
 					"target":  "annotations",
@@ -239,9 +239,9 @@ func GetSchemaExamples() map[string]interface{} {
 			},
 		},
 
-		"comprehensive": map[string]interface{}{
+		"comprehensive": map[string]any{
 			"config_version": "2.0",
-			"general": map[string]interface{}{
+			"general": map[string]any{
 				"editor":             "code",
 				"taskbin":            "task",
 				"taskargs":           []string{"rc.verbose=off"},
@@ -251,7 +251,7 @@ func GetSchemaExamples() map[string]interface{} {
 				"base_filter":        "+PENDING",
 				"debug":              false,
 			},
-			"actions": []map[string]interface{}{
+			"actions": []map[string]any{
 				{
 					"name":       "files",
 					"target":     "annotations",
@@ -269,13 +269,13 @@ func GetSchemaExamples() map[string]interface{} {
 					"filtercommand": "test -w /tmp",
 				},
 			},
-			"cli": map[string]interface{}{
+			"cli": map[string]any{
 				"default_subcommand": "normal",
-				"aliases": map[string]interface{}{
+				"aliases": map[string]any{
 					"b": "batch",
 					"n": "normal",
 				},
-				"groups": map[string]interface{}{
+				"groups": map[string]any{
 					"files": "files,notes",
 				},
 			},

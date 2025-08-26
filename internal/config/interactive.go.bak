@@ -6,46 +6,13 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"unicode/utf8"
 
-	"github.com/johnconnor-sec/taskopen-go/internal/errors"
-	"github.com/johnconnor-sec/taskopen-go/internal/types"
+	"github.com/johnconnor-sec/taskopen-go/taskopen/internal/errors"
+	"github.com/johnconnor-sec/taskopen-go/taskopen/internal/types"
 )
-
-// isInteractiveEnvironment checks if we're in a proper interactive environment
-func isInteractiveEnvironment() bool {
-	// Check if stdin is a terminal (not a pipe or redirect)
-	if fileInfo, err := os.Stdin.Stat(); err == nil {
-		if (fileInfo.Mode() & os.ModeCharDevice) == 0 {
-			fmt.Printf("[DEBUG] stdin is not a character device (mode: %v)\n", fileInfo.Mode())
-			return false
-		}
-	}
-
-	// Check environment variables that indicate non-interactive usage
-	if os.Getenv("CI") != "" || os.Getenv("TERM") == "dumb" {
-		fmt.Printf("[DEBUG] CI or dumb terminal detected\n")
-		return false
-	}
-
-	// Check if we have a reasonable terminal
-	term := os.Getenv("TERM")
-	if term == "" {
-		fmt.Printf("[DEBUG] No TERM environment variable\n")
-		return false
-	}
-
-	fmt.Printf("[DEBUG] Interactive environment: TERM=%s\n", term)
-	return true
-}
 
 // GenerateInteractive creates a configuration interactively with user input.
 func GenerateInteractive(configPath string) error {
-	// Environment-specific checks
-	if !isInteractiveEnvironment() {
-		return errors.New(errors.ConfigInvalid, "Non-interactive environment detected. Use config file instead.")
-	}
-
 	fmt.Println("🎯 Taskopen Configuration Setup")
 	fmt.Println("===============================")
 	fmt.Println()
@@ -215,27 +182,8 @@ func configureActionsInteractively(config *Config, reader *bufio.Reader) error {
 
 // readLine reads a line from the reader, trimming whitespace.
 func readLine(reader *bufio.Reader) string {
-	line, err := reader.ReadString('\n')
-	if err != nil {
-		fmt.Printf("[DEBUG] Error reading line: %v\n", err)
-		return ""
-	}
-
-	// Handle different line ending types (Unix \n, Windows \r\n, Mac \r)
-	trimmed := strings.TrimSpace(line)
-
-	// Validate UTF-8 encoding
-	if !utf8.ValidString(trimmed) {
-		fmt.Printf("[DEBUG] Invalid UTF-8 sequence detected\n")
-		// Try to clean up invalid UTF-8
-		trimmed = strings.ToValidUTF8(trimmed, "�")
-	}
-
-	// Debug character encoding issues
-	fmt.Printf("[DEBUG] Read line: %q (len=%d bytes, %d runes, bytes=%v)\n",
-		trimmed, len(trimmed), utf8.RuneCountInString(trimmed), []byte(trimmed))
-
-	return trimmed
+	line, _ := reader.ReadString('\n')
+	return strings.TrimSpace(line)
 }
 
 // ShowConfigExample displays an example configuration file.

@@ -8,7 +8,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/johnconnor-sec/taskopen-go/internal/errors"
+	"github.com/johnconnor-sec/taskopen-go/taskopen/internal/errors"
 )
 
 // Load reads and parses the configuration from the specified path.

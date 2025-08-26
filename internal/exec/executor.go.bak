@@ -12,7 +12,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/johnconnor-sec/taskopen-go/internal/errors"
+	"github.com/johnconnor-sec/taskopen-go/taskopen/internal/errors"
 )
 
 // ExecutionOptions configures process execution behavior.

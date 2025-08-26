@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/johnconnor-sec/taskopen-go/internal/types"
+	"github.com/johnconnor-sec/taskopen-go/taskopen/internal/types"
 )
 
 func TestDefaultConfig(t *testing.T) {

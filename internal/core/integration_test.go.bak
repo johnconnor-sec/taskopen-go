@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/johnconnor-sec/taskopen-go/internal/config"
-	"github.com/johnconnor-sec/taskopen-go/internal/taskwarrior"
-	"github.com/johnconnor-sec/taskopen-go/internal/types"
+	"github.com/johnconnor-sec/taskopen-go/taskopen/internal/config"
+	"github.com/johnconnor-sec/taskopen-go/taskopen/internal/taskwarrior"
+	"github.com/johnconnor-sec/taskopen-go/taskopen/internal/types"
 )
 
 func TestNewTaskOpen(t *testing.T) {

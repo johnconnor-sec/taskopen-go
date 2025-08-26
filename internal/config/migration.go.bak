@@ -9,8 +9,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/johnconnor-sec/taskopen-go/internal/errors"
-	"github.com/johnconnor-sec/taskopen-go/internal/types"
+	"github.com/johnconnor-sec/taskopen-go/taskopen/internal/errors"
+	"github.com/johnconnor-sec/taskopen-go/taskopen/internal/types"
 )
 
 // MigrateFromINI converts an INI configuration file to YAML format.
