@@ -2,9 +2,9 @@
 
 A powerful task annotation opener for Taskwarrior, rewritten in Go for better performance and maintainability.
 
-[![CI](https://github.com/your-username/taskopen/actions/workflows/ci.yml/badge.svg)](https://github.com/your-username/taskopen/actions/workflows/ci.yml)
-[![Go Report Card](https://goreportcard.com/badge/github.com/your-username/taskopen)](https://goreportcard.com/report/github.com/your-username/taskopen)
-[![Coverage](https://codecov.io/gh/your-username/taskopen/branch/main/graph/badge.svg)](https://codecov.io/gh/your-username/taskopen)
+[![CI](https://github.com/johnconnor-sec/taskopen-go/actions/workflows/ci.yml/badge.svg)](https://github.com/johnconnor-sec/taskopen-go/actions/workflows/ci.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/johnconnor-sec/taskopen-go)](https://goreportcard.com/report/github.com/johnconnor-sec/taskopen-go)
+[![Coverage](https://codecov.io/gh/johnconnor-sec/taskopen-go/branch/main/graph/badge.svg)](https://codecov.io/gh/johnconnor-sec/taskopen-go)
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html)
 
 ## Features
@@ -21,21 +21,24 @@ A powerful task annotation opener for Taskwarrior, rewritten in Go for better pe
 ### Installation
 
 #### From Source (Recommended for Development)
+
 ```bash
-git clone https://github.com/your-username/taskopen.git
-cd taskopen/taskopen
+git clone https://github.com/johnconnor-sec/taskopen-go.git
+cd taskopen-go/
 make dev-setup
 make build
 sudo make install
 ```
 
 #### Using Go Install
+
 ```bash
-go install github.com/your-username/taskopen/cmd/taskopen@latest
+go install github.com/johnconnor-sec/taskopen-go/cmd/taskopen@latest
 ```
 
 #### Binary Releases
-Download pre-built binaries from [Releases](https://github.com/your-username/taskopen/releases).
+
+Download pre-built binaries from [Releases](https://github.com/johnconnor-sec/taskopen-go/releases).
 
 ### Basic Usage
 
@@ -59,6 +62,7 @@ taskopen version
 
 - **Go 1.21+**: [Install Go](https://golang.org/doc/install)
 - **Taskwarrior**: Required for integration tests
+
   ```bash
   # Ubuntu/Debian
   sudo apt-get install taskwarrior
@@ -66,6 +70,7 @@ taskopen version
   # macOS
   brew install task
   ```
+
 - **Development Tools** (automatically installed with `make dev-setup`):
   - golangci-lint
   - gosec
@@ -74,8 +79,8 @@ taskopen version
 
 ```bash
 # Clone and setup
-git clone https://github.com/your-username/taskopen.git
-cd taskopen/taskopen
+git clone https://github.com/johnconnor-sec/taskopen-go.git
+cd taskopen-go
 
 # Setup development environment
 make dev-setup
@@ -90,7 +95,7 @@ make run
 ### Project Structure
 
 ```
-taskopen/
+taskopen-go/
 ├── cmd/taskopen/           # CLI entry point
 ├── internal/               # Private packages
 │   ├── types/             # Core types with validation
@@ -220,23 +225,26 @@ command = $EDITOR
 ## Testing
 
 ### Unit Tests
+
 ```bash
 make test
 ```
 
 ### Integration Tests
+
 ```bash
 make test-integration
 ```
 
 ### Performance Tests
+
 ```bash
 go test -bench=. ./internal/...
 ```
 
 ## Contributing
 
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) (TODO) for details.
 
 ### Development Workflow
 
@@ -267,7 +275,7 @@ The Go version uses a modern, modular architecture:
 
 ## License
 
-This project is licensed under the GNU General Public License v2.0 - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the GNU General Public License v2.0 - see the [LICENSE](LICENSE) (TODO) file for details.
 
 ## Acknowledgments
 
@@ -275,8 +283,3 @@ This project is licensed under the GNU General Public License v2.0 - see the [LI
 - Taskwarrior project for the excellent task management foundation
 - Go community for excellent tooling and libraries
 
----
-
-**Migration Status**: 🚧 **EPOCH 1 Complete** - Foundation & Infrastructure ✅
-
-Next: EPOCH 2 - Core Business Logic (Interactive menus, output system, action engine)
