@@ -129,11 +129,57 @@ func New(options ExecutionOptions) *Executor {
 
 // Execute runs a command with the given options.
 func (e *Executor) Execute(ctx context.Context, command string, args []string, options *ExecutionOptions) (*ExecutionResult, error) {
-	if options == nil {
-		options = &e.defaultOptions
+	// Merge provided options with defaults
+	finalOptions := e.defaultOptions
+	if options != nil {
+		// Override defaults with provided options
+		if options.Timeout != 0 {
+			finalOptions.Timeout = options.Timeout
+		}
+		if options.Environment != nil {
+			finalOptions.Environment = options.Environment
+		}
+		if options.WorkingDir != "" {
+			finalOptions.WorkingDir = options.WorkingDir
+		}
+		if options.CaptureOutput {
+			finalOptions.CaptureOutput = options.CaptureOutput
+		}
+		if options.StreamOutput {
+			finalOptions.StreamOutput = options.StreamOutput
+		}
+		// Merge sandbox options
+		if options.Sandbox.DisableNetwork {
+			finalOptions.Sandbox.DisableNetwork = options.Sandbox.DisableNetwork
+		}
+		if len(options.Sandbox.AllowedPaths) > 0 {
+			finalOptions.Sandbox.AllowedPaths = options.Sandbox.AllowedPaths
+		}
+		if options.Sandbox.MaxMemoryMB > 0 {
+			finalOptions.Sandbox.MaxMemoryMB = options.Sandbox.MaxMemoryMB
+		}
+		if options.Sandbox.DropPrivileges {
+			finalOptions.Sandbox.DropPrivileges = options.Sandbox.DropPrivileges
+		}
+		// Merge retry options
+		if options.Retry.MaxAttempts > 0 {
+			finalOptions.Retry.MaxAttempts = options.Retry.MaxAttempts
+		}
+		if options.Retry.BaseDelay > 0 {
+			finalOptions.Retry.BaseDelay = options.Retry.BaseDelay
+		}
+		if options.Retry.MaxDelay > 0 {
+			finalOptions.Retry.MaxDelay = options.Retry.MaxDelay
+		}
+		if options.Retry.BackoffMultiplier > 0 {
+			finalOptions.Retry.BackoffMultiplier = options.Retry.BackoffMultiplier
+		}
+		if len(options.Retry.RetryOnExitCodes) > 0 {
+			finalOptions.Retry.RetryOnExitCodes = options.Retry.RetryOnExitCodes
+		}
 	}
 
-	return e.executeWithRetry(ctx, command, args, *options)
+	return e.executeWithRetry(ctx, command, args, finalOptions)
 }
 
 // ExecuteFilter runs a command and returns true if exit code is 0.

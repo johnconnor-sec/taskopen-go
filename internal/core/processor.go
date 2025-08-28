@@ -21,19 +21,25 @@ import (
 
 // TaskProcessor handles the main taskopen workflow
 type TaskProcessor struct {
-	config    *config.Config
-	executor  *exec.Executor
-	formatter *output.Formatter
-	logger    *output.Logger
+	config         *config.Config
+	executor       *exec.Executor
+	formatter      *output.Formatter
+	logger         *output.Logger
+	builtinHandler *BuiltinHandler
 }
 
 // NewTaskProcessor creates a new task processor
 func NewTaskProcessor(cfg *config.Config) *TaskProcessor {
+	executor := exec.New(exec.ExecutionOptions{Timeout: 30 * time.Second})
+	formatter := output.NewFormatter(os.Stdout)
+	logger := output.NewLogger()
+
 	return &TaskProcessor{
-		config:    cfg,
-		executor:  exec.New(exec.ExecutionOptions{Timeout: 30 * time.Second}),
-		formatter: output.NewFormatter(os.Stdout),
-		logger:    output.NewLogger(),
+		config:         cfg,
+		executor:       executor,
+		formatter:      formatter,
+		logger:         logger,
+		builtinHandler: NewBuiltinHandler(executor, formatter, logger),
 	}
 }
 
@@ -51,9 +57,9 @@ type Actionable struct {
 func (tp *TaskProcessor) ProcessTasks(ctx context.Context, filters []string, single bool, interactive bool) error {
 	// Skip context for now and use provided filters directly
 	allFilters := filters
-	if len(allFilters) == 0 {
+	if len(allFilters) == 0 && tp.config.General.BaseFilter != "" {
 		// Add base filter when no filters provided
-		allFilters = append(allFilters, tp.config.General.BaseFilter)
+		allFilters = append(allFilters, strings.Fields(tp.config.General.BaseFilter)...)
 	}
 
 	// Get tasks from taskwarrior
@@ -124,15 +130,11 @@ func (tp *TaskProcessor) getTasksFromTaskwarrior(ctx context.Context, filters []
 	args = append(args, filters...)
 	args = append(args, "export")
 
-	fmt.Printf("DEBUG: Executing taskwarrior: %s %v\n", tp.config.General.TaskBin, args)
-
 	result, err := tp.executor.Execute(ctx, tp.config.General.TaskBin, args,
 		&exec.ExecutionOptions{
 			CaptureOutput: true,
 			Timeout:       10 * time.Second,
 		})
-
-	fmt.Printf("DEBUG: Executor result - err: %v, result: %+v\n", err, result)
 
 	if err != nil {
 		return nil, fmt.Errorf("taskwarrior execution failed: %w", err)
@@ -606,6 +608,12 @@ func (tp *TaskProcessor) executeActionable(ctx context.Context, actionable *Acti
 
 	tp.formatter.Info("Executing: %s", command)
 
+	// Check if this is a built-in command
+	if tp.builtinHandler.IsBuiltinCommand(command) {
+		return tp.builtinHandler.ExecuteBuiltinCommand(ctx, command, actionable.Environment)
+	}
+
+	// Execute as external command
 	result, err := tp.executor.Execute(ctx, "sh", []string{"-c", command},
 		&exec.ExecutionOptions{Environment: actionable.Environment})
 	if err != nil {
