@@ -29,7 +29,7 @@ dev-setup: ## Set up development environment
 	@echo "Setting up development environment..."
 	go mod download
 	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-	go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest
+	go install github.com/securego/gosec/v2/cmd/gosec@latest
 	@echo "✓ Development environment ready"
 
 deps: ## Download and verify dependencies
