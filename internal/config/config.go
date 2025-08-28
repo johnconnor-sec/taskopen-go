@@ -96,7 +96,7 @@ func DefaultConfig() *Config {
 			{
 				Name:       "notes",
 				Target:     "annotations",
-				Regex:      `^Notes(\..*)?`,
+				Regex:      `.*\.([a-zA-Z0-9]+)$`,
 				LabelRegex: ".*",
 				Command:    `editnote ~/Notes/tasknotes/$UUID$LAST_MATCH "$TASK_DESCRIPTION" $UUID`,
 				Modes:      []string{"batch", "any", "normal"},

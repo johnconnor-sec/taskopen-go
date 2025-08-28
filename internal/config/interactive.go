@@ -261,8 +261,9 @@ actions:
     
   - name: "notes"
     target: "annotations"
-    regex: '^Notes(\..*)?'
+		regex: '.*\.([a-zA-Z0-9]+)$'
     labelregex: ".*"
+	  # Replace this with the default path of where you store task notes
     command: 'editnote ~/Notes/tasknotes/$UUID$LAST_MATCH "$TASK_DESCRIPTION" $UUID'
     modes: ["batch", "any", "normal"]
     
