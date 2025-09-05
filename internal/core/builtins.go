@@ -138,6 +138,7 @@ func (bh *BuiltinHandler) executeEditNote(ctx context.Context, args []string, en
 		// Use shell for complex commands (note: interactive detection not as reliable through shell)
 		result, err = bh.executor.Execute(ctx, "sh", []string{"-c", command}, &exec.ExecutionOptions{
 			Environment: env,
+			Interactive: isInteractive,
 		})
 	} else {
 		bh.logger.Debug("Using direct execution for editor", map[string]any{
