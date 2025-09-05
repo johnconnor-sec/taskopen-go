@@ -73,7 +73,7 @@ func GenerateJSONSchema() ([]byte, error) {
 					"no_annotation_hook": map[string]any{
 						"type":        "string",
 						"description": "Command to run for tasks without annotations",
-						"default":     "addnote $ID",
+						"default":     "annotate $ID",
 					},
 
 					"sort": map[string]any{
@@ -246,7 +246,7 @@ func GetSchemaExamples() map[string]any {
 				"taskbin":            "task",
 				"taskargs":           []string{"rc.verbose=off"},
 				"task_attributes":    "priority,project,tags,description,due",
-				"no_annotation_hook": "addnote $ID",
+				"no_annotation_hook": "annotate $ID",
 				"sort":               "urgency-,annot",
 				"base_filter":        "+PENDING",
 				"debug":              false,

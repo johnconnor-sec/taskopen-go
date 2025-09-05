@@ -45,7 +45,7 @@ type GeneralConfig struct {
 	TaskAttributes string `yaml:"task_attributes" json:"task_attributes" default:"priority,project,tags,description"`
 
 	// Hook for tasks without annotations
-	NoAnnotationHook string `yaml:"no_annotation_hook" json:"no_annotation_hook" default:"addnote $ID"`
+	NoAnnotationHook string `yaml:"no_annotation_hook" json:"no_annotation_hook" default:"annotate $ID"`
 
 	// Default task sort order
 	Sort string `yaml:"sort" json:"sort" default:"urgency-,annot"`
@@ -79,7 +79,7 @@ func DefaultConfig() *Config {
 			TaskArgs:         []string{},
 			PathExt:          "",
 			TaskAttributes:   "priority,project,tags,description",
-			NoAnnotationHook: "addnote $ID",
+			NoAnnotationHook: "annotate $ID",
 			Sort:             "urgency-,annot",
 			BaseFilter:       "+PENDING",
 			Debug:            false,
