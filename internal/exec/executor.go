@@ -237,15 +237,17 @@ func (e *Executor) IsInteractiveEditor(command string) bool {
 	// Remove common executable extensions (like .exe) for better cross-platform support
 	executable = strings.TrimSuffix(executable, ".exe")
 
-	// List of known interactive editors
-	interactiveEditors := []string{
-		"vim", "nvim", "vi", "nano", "emacs", "pico", "joe", "micro",
-		"code", "subl", "atom", "gedit", "kate", "mousepad", "leafpad",
-		"ne", "mg", "zile", "jed", "mcedit", "tilde", "kakoune", "kak",
-		"helix", "hx", "ed",
+	// List of known interactive editors (base names without extensions)
+	interactiveEditorsMap := map[string]bool{
+		"vim": true, "nvim": true, "vi": true, "nano": true, "emacs": true, "pico": true, "joe": true, "micro": true,
+		"code": true, "subl": true, "atom": true, "gedit": true, "kate": true, "mousepad": true, "leafpad": true,
+		"ne": true, "mg": true, "zile": true, "jed": true, "mcedit": true, "tilde": true, "kakoune": true, "kak": true,
+		"helix": true, "hx": true, "ed": true,
+		// Hidden executable variants (common on Unix)
+		".vim": true, ".nvim": true, ".nano": true, ".emacs": true,
 	}
 
-	return slices.Contains(interactiveEditors, executable)
+	return interactiveEditorsMap[executable]
 }
 
 // NeedsShell determines if a command requires shell execution
