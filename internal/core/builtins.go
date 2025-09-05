@@ -121,9 +121,36 @@ func (bh *BuiltinHandler) executeEditNote(ctx context.Context, args []string, en
 
 	bh.formatter.Info("Opening note with %s: %s", editor, filePath)
 
-	result, err := bh.executor.Execute(ctx, editor, []string{filePath}, &exec.ExecutionOptions{
-		Environment: env,
-	})
+	// Use intelligent execution logic with interactive editor support
+	command := fmt.Sprintf("%s %s", editor, filePath)
+	var result *exec.ExecutionResult
+	var err error
+
+	// Check if this is an interactive editor
+	isInteractive := bh.executor.IsInteractiveEditor(command)
+
+	// Check if we need shell or can use direct execution
+	if bh.executor.NeedsShell(command) {
+		bh.logger.Debug("Using shell execution for editor command with shell features", map[string]any{
+			"command":     command,
+			"interactive": isInteractive,
+		})
+		// Use shell for complex commands (note: interactive detection not as reliable through shell)
+		result, err = bh.executor.Execute(ctx, "sh", []string{"-c", command}, &exec.ExecutionOptions{
+			Environment: env,
+		})
+	} else {
+		bh.logger.Debug("Using direct execution for editor", map[string]any{
+			"command":     command,
+			"interactive": isInteractive,
+		})
+		// Use direct execution for simple editor commands
+		result, err = bh.executor.ExecuteDirect(ctx, command, &exec.ExecutionOptions{
+			Environment: env,
+			Interactive: isInteractive, // No timeout for interactive editors
+		})
+	}
+
 	if err != nil {
 		return errors.Wrap(err, errors.ActionExecution, "Failed to open editor").
 			WithDetails(fmt.Sprintf("Editor: %s, File: %s", editor, filePath)).

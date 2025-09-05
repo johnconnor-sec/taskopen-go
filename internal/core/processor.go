@@ -613,9 +613,27 @@ func (tp *TaskProcessor) executeActionable(ctx context.Context, actionable *Acti
 		return tp.builtinHandler.ExecuteBuiltinCommand(ctx, command, actionable.Environment)
 	}
 
-	// Execute as external command
-	result, err := tp.executor.Execute(ctx, "sh", []string{"-c", command},
-		&exec.ExecutionOptions{Environment: actionable.Environment})
+	// Execute as external command - use direct execution for better interactive support
+	var result *exec.ExecutionResult
+	var err error
+
+	// Check if we need shell or can use direct execution
+	if tp.executor.NeedsShell(command) {
+		tp.logger.Debug("Using shell execution for command with shell features", map[string]any{
+			"command": command,
+		})
+		// Use shell for complex commands
+		result, err = tp.executor.Execute(ctx, "sh", []string{"-c", command},
+			&exec.ExecutionOptions{Environment: actionable.Environment})
+	} else {
+		tp.logger.Debug("Using direct execution for interactive compatibility", map[string]any{
+			"command": command,
+		})
+		// Use direct execution for simple commands (better for interactive programs)
+		result, err = tp.executor.ExecuteDirect(ctx, command,
+			&exec.ExecutionOptions{Environment: actionable.Environment})
+	}
+
 	if err != nil {
 		return errors.Wrap(err, errors.ActionExecution, "Failed to execute action")
 	}

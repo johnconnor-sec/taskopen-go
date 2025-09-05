@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -31,6 +32,9 @@ type ExecutionOptions struct {
 
 	// Whether to stream output line by line
 	StreamOutput bool
+
+	// Whether this is an interactive command (no timeout)
+	Interactive bool
 
 	// Security sandbox options
 	Sandbox SandboxOptions
@@ -218,6 +222,85 @@ func (e *Executor) ExecuteStream(ctx context.Context, command string, args []str
 	return outputChan, errorChan
 }
 
+// IsInteractiveEditor determines if a command is an interactive editor
+func (e *Executor) IsInteractiveEditor(command string) bool {
+	// Extract the first word (executable name) from the command
+	parts := strings.Fields(strings.TrimSpace(command))
+	if len(parts) == 0 {
+		return false
+	}
+
+	executable := strings.ToLower(parts[0])
+
+	// Remove path components to get just the executable name
+	if idx := strings.LastIndex(executable, "/"); idx != -1 {
+		executable = executable[idx+1:]
+	}
+
+	// List of known interactive editors
+	interactiveEditors := []string{
+		"vim", "nvim", "vi", "nano", "emacs", "pico", "joe", "micro",
+		"code", "subl", "atom", "gedit", "kate", "mousepad", "leafpad",
+		"ne", "mg", "zile", "jed", "mcedit", "tilde", "kakoune", "kak",
+		"helix", "hx", "ed",
+	}
+
+	return slices.Contains(interactiveEditors, executable)
+}
+
+// NeedsShell determines if a command requires shell execution
+func (e *Executor) NeedsShell(command string) bool {
+	// Check for shell features that require shell execution
+	shellFeatures := []string{
+		"|", "&", ";", "&&", "||", // Pipes and operators
+		">", ">>", "<", // Redirections
+		"$(", "`", // Command substitution
+		"*", "?", "[", // Glob patterns
+	}
+
+	for _, feature := range shellFeatures {
+		if strings.Contains(command, feature) {
+			return true
+		}
+	}
+
+	// Check for variable assignments (VAR=value command)
+	if strings.Contains(command, "=") && !strings.HasPrefix(strings.TrimSpace(command), "=") {
+		parts := strings.Fields(strings.TrimSpace(command))
+		if len(parts) > 1 {
+			// Check if first part looks like a variable assignment
+			for _, part := range parts {
+				if strings.Contains(part, "=") && !strings.HasPrefix(part, "-") {
+					// This looks like VAR=value, need shell
+					return true
+				}
+			}
+		}
+	}
+
+	return false
+}
+
+// ExecuteDirect executes a command directly without shell wrapper for better interactive support
+func (e *Executor) ExecuteDirect(ctx context.Context, command string, options *ExecutionOptions) (*ExecutionResult, error) {
+	// Parse command into executable and arguments
+	cmdParts := strings.Fields(strings.TrimSpace(command))
+	if len(cmdParts) == 0 {
+		return nil, errors.New(errors.ActionExecution, "Empty command")
+	}
+
+	executable := cmdParts[0]
+	args := cmdParts[1:]
+
+	// Use direct execution
+	finalOptions := e.defaultOptions
+	if options != nil {
+		finalOptions = e.mergeOptions(finalOptions, *options)
+	}
+
+	return e.executeDirectSingle(ctx, executable, args, finalOptions)
+}
+
 // executeWithRetry handles retry logic for command execution.
 func (e *Executor) executeWithRetry(ctx context.Context, command string, args []string, options ExecutionOptions) (*ExecutionResult, error) {
 	var lastResult *ExecutionResult
@@ -236,10 +319,7 @@ func (e *Executor) executeWithRetry(ctx context.Context, command string, args []
 			}
 
 			// Exponential backoff
-			delay = time.Duration(float64(delay) * options.Retry.BackoffMultiplier)
-			if delay > options.Retry.MaxDelay {
-				delay = options.Retry.MaxDelay
-			}
+			delay = min(time.Duration(float64(delay)*options.Retry.BackoffMultiplier), options.Retry.MaxDelay)
 		}
 
 		result, err := e.executeSingle(ctx, command, args, options)
@@ -257,13 +337,7 @@ func (e *Executor) executeWithRetry(ctx context.Context, command string, args []
 
 		// Check if we should retry based on exit code
 		if result != nil && len(options.Retry.RetryOnExitCodes) > 0 {
-			shouldRetry := false
-			for _, retryCode := range options.Retry.RetryOnExitCodes {
-				if result.ExitCode == retryCode {
-					shouldRetry = true
-					break
-				}
-			}
+			shouldRetry := slices.Contains(options.Retry.RetryOnExitCodes, result.ExitCode)
 			if !shouldRetry {
 				break
 			}
@@ -451,4 +525,119 @@ func (e *Executor) applySandbox(cmd *exec.Cmd, sandbox SandboxOptions) error {
 	// platform-specific implementations using cgroups, namespaces, etc.
 
 	return nil
+}
+
+// mergeOptions merges execution options
+func (e *Executor) mergeOptions(base ExecutionOptions, override ExecutionOptions) ExecutionOptions {
+	result := base
+
+	if override.Timeout != 0 {
+		result.Timeout = override.Timeout
+	}
+	if override.Environment != nil {
+		result.Environment = override.Environment
+	}
+	if override.WorkingDir != "" {
+		result.WorkingDir = override.WorkingDir
+	}
+	if override.CaptureOutput {
+		result.CaptureOutput = override.CaptureOutput
+	}
+	if override.StreamOutput {
+		result.StreamOutput = override.StreamOutput
+	}
+	if override.Interactive {
+		result.Interactive = override.Interactive
+	}
+
+	return result
+}
+
+// executeDirectSingle executes a command directly without shell wrapper
+func (e *Executor) executeDirectSingle(ctx context.Context, command string, args []string, options ExecutionOptions) (*ExecutionResult, error) {
+	startTime := time.Now()
+
+	// Create context - for interactive commands, don't use timeout
+	var execCtx context.Context
+	var cancel context.CancelFunc
+
+	if options.Interactive {
+		// For interactive commands, use the parent context without timeout
+		execCtx = ctx
+		cancel = func() {} // No-op cancel function
+	} else {
+		// For non-interactive commands, use timeout
+		execCtx, cancel = context.WithTimeout(ctx, options.Timeout)
+	}
+	defer cancel()
+
+	// Create command - execute directly without shell
+	cmd := exec.CommandContext(execCtx, command, args...)
+
+	// Set working directory
+	if options.WorkingDir != "" {
+		cmd.Dir = options.WorkingDir
+	}
+
+	// Set environment
+	if options.Environment != nil {
+		env := make([]string, 0, len(options.Environment))
+		for key, value := range options.Environment {
+			env = append(env, fmt.Sprintf("%s=%s", key, value))
+		}
+		cmd.Env = env
+	}
+
+	// Apply security sandbox
+	if err := e.applySandbox(cmd, options.Sandbox); err != nil {
+		return nil, errors.Wrap(err, errors.ActionExecution, "Failed to apply security sandbox")
+	}
+
+	result := &ExecutionResult{}
+
+	// Set up output handling - for interactive commands, inherit parent streams
+	if options.CaptureOutput {
+		var stdout, stderr strings.Builder
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+
+		// Execute command
+		err := cmd.Run()
+
+		result.Stdout = stdout.String()
+		result.Stderr = stderr.String()
+		result.Duration = time.Since(startTime)
+
+		return e.handleCommandResult(cmd, err, result, execCtx)
+	} else {
+		// Inherit parent streams for interactive programs
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		cmd.Stdin = os.Stdin
+
+		// For interactive commands, set up proper signal handling
+		if options.Interactive {
+			return e.runInteractiveCommand(cmd, result, execCtx, startTime)
+		} else {
+			// Execute non-interactive command normally
+			err := cmd.Run()
+			result.Duration = time.Since(startTime)
+			return e.handleCommandResult(cmd, err, result, execCtx)
+		}
+	}
+}
+
+// runInteractiveCommand runs an interactive command with proper signal handling and terminal state management
+func (e *Executor) runInteractiveCommand(cmd *exec.Cmd, result *ExecutionResult, ctx context.Context, startTime time.Time) (*ExecutionResult, error) {
+	// Start the command
+	err := cmd.Start()
+	if err != nil {
+		return result, errors.Wrap(err, errors.ActionExecution, "Failed to start interactive command")
+	}
+
+	// Wait for the command to complete
+	err = cmd.Wait()
+	result.Duration = time.Since(startTime)
+
+	return e.handleCommandResult(cmd, err, result, ctx)
 }
