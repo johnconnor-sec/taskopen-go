@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"strings"
 	"syscall"
@@ -230,12 +231,11 @@ func (e *Executor) IsInteractiveEditor(command string) bool {
 		return false
 	}
 
-	executable := strings.ToLower(parts[0])
+	// Remove path components to get just the executable name (cross-platform)
+	executable := strings.ToLower(filepath.Base(parts[0]))
 
-	// Remove path components to get just the executable name
-	if idx := strings.LastIndex(executable, "/"); idx != -1 {
-		executable = executable[idx+1:]
-	}
+	// Remove common executable extensions (like .exe) for better cross-platform support
+	executable = strings.TrimSuffix(executable, ".exe")
 
 	// List of known interactive editors
 	interactiveEditors := []string{
