@@ -244,7 +244,7 @@ go test -bench=. ./internal/...
 
 ## Contributing
 
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) (TODO) for details.
+Contributions are welcome! Please see the [Contributing Guide](CONTRIBUTING.md) (*TODO*) for details.
 
 ### Development Workflow
 
@@ -282,4 +282,3 @@ This project is licensed under the GNU General Public License v2.0 - see the [LI
 - Original Nim implementation by [Johannes Schlatow](https://github.com/jschlatow)
 - Taskwarrior project for the excellent task management foundation
 - Go community for excellent tooling and libraries
-
