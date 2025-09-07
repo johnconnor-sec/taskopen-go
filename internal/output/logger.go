@@ -231,21 +231,16 @@ func (l *Logger) writeEntry(entry LogEntry) {
 func (l *Logger) formatTextEntry(entry LogEntry) string {
 	var parts []string
 
-	// Timestamp
-	parts = append(parts, entry.Timestamp.Format(l.timeFormat))
-
-	// Level with color
-	levelStr := fmt.Sprintf("[%s]", entry.Level.String())
-	switch entry.Level {
-	case LogLevelTrace, LogLevelDebug:
-		levelStr = l.formatter.colorize(levelStr, l.formatter.theme.Muted, StyleDim)
-	case LogLevelInfo:
-		levelStr = l.formatter.colorize(levelStr, l.formatter.theme.Info, StyleNormal)
-	case LogLevelWarn:
-		levelStr = l.formatter.colorize(levelStr, l.formatter.theme.Warning, StyleBold)
-	case LogLevelError, LogLevelFatal:
-		levelStr = l.formatter.colorize(levelStr, l.formatter.theme.Error, StyleBold)
+	// Timestamp - shorter format for better readability
+	timeFormat := "15:04:05"
+	if l.timeFormat == time.RFC3339 {
+		parts = append(parts, entry.Timestamp.Format(timeFormat))
+	} else {
+		parts = append(parts, entry.Timestamp.Format(l.timeFormat))
 	}
+
+	// Level with color and better formatting
+	levelStr := l.formatLogLevel(entry.Level)
 	parts = append(parts, levelStr)
 
 	// Caller information
@@ -257,17 +252,115 @@ func (l *Logger) formatTextEntry(entry LogEntry) string {
 	// Message
 	parts = append(parts, entry.Message)
 
-	// Fields
+	// Fields with better formatting
 	if entry.Fields != nil && len(entry.Fields) > 0 {
-		var fieldPairs []string
-		for k, v := range entry.Fields {
-			fieldPairs = append(fieldPairs, fmt.Sprintf("%s=%v", k, v))
-		}
-		fields := l.formatter.colorize(fmt.Sprintf("[%s]", strings.Join(fieldPairs, " ")), l.formatter.theme.Secondary, StyleDim)
-		parts = append(parts, fields)
+		fieldsStr := l.formatFields(entry.Fields)
+		parts = append(parts, fieldsStr)
 	}
 
 	return strings.Join(parts, " ") + "\n"
+}
+
+// formatLogLevel formats the log level with appropriate colors and icons
+func (l *Logger) formatLogLevel(level LogLevel) string {
+	var icon, text string
+	var color Color
+	var style Style
+
+	switch level {
+	case LogLevelTrace:
+		icon, text, color, style = "🔍", "TRACE", l.formatter.theme.Muted, StyleDim
+	case LogLevelDebug:
+		icon, text, color, style = "🐛", "DEBUG", l.formatter.theme.Muted, StyleDim
+	case LogLevelInfo:
+		icon, text, color, style = "ℹ️", "INFO", l.formatter.theme.Info, StyleNormal
+	case LogLevelWarn:
+		icon, text, color, style = "⚠️", "WARN", l.formatter.theme.Warning, StyleBold
+	case LogLevelError:
+		icon, text, color, style = "❌", "ERROR", l.formatter.theme.Error, StyleBold
+	case LogLevelFatal:
+		icon, text, color, style = "💀", "FATAL", l.formatter.theme.Error, StyleBold
+	default:
+		icon, text, color, style = "❓", "UNKNOWN", l.formatter.theme.Muted, StyleNormal
+	}
+
+	if l.formatter.colorOutput {
+		return l.formatter.colorize(fmt.Sprintf("%s [%s]", icon, text), color, style)
+	}
+	return fmt.Sprintf("[%s]", text) // No icons in non-color mode for better screen reader compatibility
+}
+
+// formatFields formats the log fields for better readability
+func (l *Logger) formatFields(fields map[string]interface{}) string {
+	if len(fields) == 0 {
+		return ""
+	}
+
+	var fieldPairs []string
+
+	// Sort by key for consistent output
+	keys := make([]string, 0, len(fields))
+	for k := range fields {
+		keys = append(keys, k)
+	}
+
+	for _, k := range keys {
+		v := fields[k]
+		// Format special field types
+		switch k {
+		case "error":
+			fieldPairs = append(fieldPairs, l.formatter.colorize(fmt.Sprintf("error=%v", v), l.formatter.theme.Error, StyleNormal))
+		case "duration", "elapsed":
+			fieldPairs = append(fieldPairs, l.formatter.colorize(fmt.Sprintf("%s=%v", k, v), l.formatter.theme.Success, StyleNormal))
+		case "component", "module":
+			fieldPairs = append(fieldPairs, l.formatter.colorize(fmt.Sprintf("%s=%v", k, v), l.formatter.theme.Primary, StyleNormal))
+		default:
+			fieldPairs = append(fieldPairs, fmt.Sprintf("%s=%v", k, v))
+		}
+	}
+
+	fieldsText := strings.Join(fieldPairs, " ")
+	return l.formatter.colorize(fmt.Sprintf("[%s]", fieldsText), l.formatter.theme.Secondary, StyleDim)
+}
+
+// SetFormatter allows changing the formatter used by the logger
+func (l *Logger) SetFormatter(formatter *Formatter) *Logger {
+	l.formatter = formatter
+	return l
+}
+
+// Performance logging helpers
+func (l *Logger) LogDuration(operation string, duration time.Duration, fields ...map[string]interface{}) {
+	durationFields := map[string]interface{}{
+		"operation": operation,
+		"duration":  duration.String(),
+	}
+
+	// Merge additional fields
+	for _, fieldMap := range fields {
+		for k, v := range fieldMap {
+			durationFields[k] = v
+		}
+	}
+
+	// Choose appropriate log level based on duration
+	if duration > 5*time.Second {
+		l.Warn("Slow operation detected", durationFields)
+	} else if duration > 1*time.Second {
+		l.Info("Operation completed", durationFields)
+	} else {
+		l.Debug("Operation completed", durationFields)
+	}
+}
+
+// LogMemoryUsage logs memory usage statistics
+func (l *Logger) LogMemoryUsage(component string) {
+	// This would integrate with runtime.MemStats in a real implementation
+	fields := map[string]interface{}{
+		"component": component,
+		"memory":    "tracking_placeholder",
+	}
+	l.Debug("Memory usage", fields)
 }
 
 // Trace logs a trace message
