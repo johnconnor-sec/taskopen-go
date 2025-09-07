@@ -6,6 +6,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"syscall"
 	"text/tabwriter"
 	"time"
 )
@@ -194,7 +195,7 @@ func (f *Formatter) colorize(text string, color Color, style Style) string {
 }
 
 // Success prints a success message
-func (f *Formatter) Success(format string, args ...interface{}) {
+func (f *Formatter) Success(format string, args ...any) {
 	if f.level == LevelQuiet {
 		return
 	}
@@ -204,14 +205,14 @@ func (f *Formatter) Success(format string, args ...interface{}) {
 }
 
 // Error prints an error message
-func (f *Formatter) Error(format string, args ...interface{}) {
+func (f *Formatter) Error(format string, args ...any) {
 	message := fmt.Sprintf(format, args...)
 	styled := f.colorize("✗ "+message, f.theme.Error, StyleBold)
 	fmt.Fprintln(f.writer, styled)
 }
 
 // Warning prints a warning message
-func (f *Formatter) Warning(format string, args ...interface{}) {
+func (f *Formatter) Warning(format string, args ...any) {
 	if f.level == LevelQuiet {
 		return
 	}
@@ -221,7 +222,7 @@ func (f *Formatter) Warning(format string, args ...interface{}) {
 }
 
 // Info prints an info message
-func (f *Formatter) Info(format string, args ...interface{}) {
+func (f *Formatter) Info(format string, args ...any) {
 	if f.level == LevelQuiet {
 		return
 	}
@@ -231,7 +232,7 @@ func (f *Formatter) Info(format string, args ...interface{}) {
 }
 
 // Debug prints a debug message
-func (f *Formatter) Debug(format string, args ...interface{}) {
+func (f *Formatter) Debug(format string, args ...any) {
 	if f.level < LevelDebug {
 		return
 	}
@@ -267,7 +268,7 @@ func (f *Formatter) Subheader(text string) {
 }
 
 // List prints a bulleted list item
-func (f *Formatter) List(format string, args ...interface{}) {
+func (f *Formatter) List(format string, args ...any) {
 	if f.level == LevelQuiet {
 		return
 	}
