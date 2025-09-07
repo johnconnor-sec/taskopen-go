@@ -568,7 +568,42 @@ func getTerminalWidth() int {
 			return w
 		}
 	}
+
+	// Try to get terminal width from system call
+	if width := getTerminalWidthSyscall(); width > 0 {
+		return width
+	}
+
+	// Fallback to reasonable default
 	return 80
+}
+
+// getTerminalWidthSyscall gets terminal width using system calls
+func getTerminalWidthSyscall() int {
+	type winsize struct {
+		Row    uint16
+		Col    uint16
+		Xpixel uint16
+		Ypixel uint16
+	}
+
+	ws := &winsize{}
+	retCode, _, _ := syscall.Syscall(syscall.SYS_IOCTL,
+		uintptr(syscall.Stderr),
+		uintptr(syscall.TIOCGWINSZ),
+		uintptr(unsafe.Pointer(ws)))
+
+	if int(retCode) == -1 {
+		return 0
+	}
+	return int(ws.Col)
+}
+
+// GetCurrentWidth dynamically gets the current terminal width
+func (f *Formatter) GetCurrentWidth() int {
+	currentWidth := getTerminalWidth()
+	f.width = currentWidth
+	return currentWidth
 }
 
 func min(a, b int) int {
