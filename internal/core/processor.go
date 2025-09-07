@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"regexp"
 	"sort"
@@ -16,7 +17,9 @@ import (
 	"github.com/johnconnor-sec/taskopen-go/internal/errors"
 	"github.com/johnconnor-sec/taskopen-go/internal/exec"
 	"github.com/johnconnor-sec/taskopen-go/internal/output"
+	"github.com/johnconnor-sec/taskopen-go/internal/security"
 	"github.com/johnconnor-sec/taskopen-go/internal/types"
+	"github.com/johnconnor-sec/taskopen-go/internal/ui"
 )
 
 // TaskProcessor handles the main taskopen workflow
@@ -100,28 +103,28 @@ func (tp *TaskProcessor) ProcessTasks(ctx context.Context, filters []string, sin
 }
 
 // getCurrentContext gets the current taskwarrior context
-func (tp *TaskProcessor) getCurrentContext(ctx context.Context) (string, error) {
-	if tp == nil || tp.config == nil || tp.executor == nil {
-		return "", fmt.Errorf("task processor not properly initialized")
-	}
-
-	args := append(tp.config.General.TaskArgs, "context", "show")
-	result, err := tp.executor.Execute(ctx, tp.config.General.TaskBin, args,
-		&exec.ExecutionOptions{CaptureOutput: true, Timeout: 5 * time.Second})
-	if err != nil {
-		return "", fmt.Errorf("failed to execute taskwarrior: %w", err)
-	}
-
-	if result == nil {
-		return "", fmt.Errorf("no result from taskwarrior execution")
-	}
-
-	if result.ExitCode != 0 {
-		return "", fmt.Errorf("taskwarrior context command failed with exit code %d", result.ExitCode)
-	}
-
-	return strings.TrimSpace(result.Stdout), nil
-}
+// func (tp *TaskProcessor) getCurrentContext(ctx context.Context) (string, error) {
+// 	if tp == nil || tp.config == nil || tp.executor == nil {
+// 		return "", fmt.Errorf("task processor not properly initialized")
+// 	}
+//
+// 	args := append(tp.config.General.TaskArgs, "context", "show")
+// 	result, err := tp.executor.Execute(ctx, tp.config.General.TaskBin, args,
+// 		&exec.ExecutionOptions{CaptureOutput: true, Timeout: 5 * time.Second})
+// 	if err != nil {
+// 		return "", fmt.Errorf("failed to execute taskwarrior: %w", err)
+// 	}
+//
+// 	if result == nil {
+// 		return "", fmt.Errorf("no result from taskwarrior execution")
+// 	}
+//
+// 	if result.ExitCode != 0 {
+// 		return "", fmt.Errorf("taskwarrior context command failed with exit code %d", result.ExitCode)
+// 	}
+//
+// 	return strings.TrimSpace(result.Stdout), nil
+// }
 
 // getTasksFromTaskwarrior retrieves tasks as JSON from taskwarrior
 func (tp *TaskProcessor) getTasksFromTaskwarrior(ctx context.Context, filters []string) ([]map[string]any, error) {
@@ -135,7 +138,6 @@ func (tp *TaskProcessor) getTasksFromTaskwarrior(ctx context.Context, filters []
 			CaptureOutput: true,
 			Timeout:       10 * time.Second,
 		})
-
 	if err != nil {
 		return nil, fmt.Errorf("taskwarrior execution failed: %w", err)
 	}
@@ -442,9 +444,7 @@ func (tp *TaskProcessor) matchActionsPure(ctx context.Context, baseEnv map[strin
 // copyEnvironment creates a copy of environment map
 func (tp *TaskProcessor) copyEnvironment(baseEnv map[string]string) map[string]string {
 	env := make(map[string]string)
-	for k, v := range baseEnv {
-		env[k] = v
-	}
+	maps.Copy(env, baseEnv)
 	return env
 }
 
@@ -590,10 +590,58 @@ func (tp *TaskProcessor) getTaskFloat(task map[string]any, key string) float64 {
 	return 0.0
 }
 
-// interactiveSelection handles interactive selection of actionables
-func (tp *TaskProcessor) interactiveSelection(_ context.Context, actionables []*Actionable) error {
-	tp.formatter.Info("Found %d actionable items - interactive selection not yet implemented", len(actionables))
-	return tp.listActionables(actionables)
+// interactiveSelection handles interactive selection of actionables using the secure TUI
+func (tp *TaskProcessor) interactiveSelection(ctx context.Context, actionables []*Actionable) error {
+	// Convert actionables to menu items
+	menuItems := tp.convertActionablesToMenuItems(actionables)
+
+	// Configure the menu
+	config := tp.createMenuConfig()
+
+	// Configure secure TUI settings
+	tuiConfig := ui.SecureTUIConfig{
+		ShowPreview:       true,
+		PreviewWidth:      40,
+		HideEnvVars:       true, // IMPORTANT: Hide environment variables by default
+		VisibilityLevel:   security.VisibilityMasked,
+		AccessibilityMode: output.AccessibilityNormal,
+	}
+
+	// Create the secure TUI
+	tui, err := ui.NewSecureTUI(menuItems, config, tuiConfig)
+	if err != nil {
+		return fmt.Errorf("failed to create secure TUI: %w", err)
+	}
+	defer tui.Close()
+
+	// Show the TUI and get user selection
+	selected, err := tui.Show()
+	if err != nil {
+		return fmt.Errorf("TUI interaction failed: %w", err)
+	}
+
+	// Handle cancellation
+	if selected == nil {
+		tp.formatter.Info("Action cancelled by user")
+		return nil
+	}
+
+	// Find the corresponding actionable
+	selectedIndex := -1
+	for i, item := range menuItems {
+		if item.ID == selected.ID {
+			selectedIndex = i
+			break
+		}
+	}
+
+	if selectedIndex == -1 {
+		return fmt.Errorf("selected item not found")
+	}
+
+	// Execute the selected actionable
+	tp.formatter.Success("Executing: %s", selected.Text)
+	return tp.executeActionable(ctx, actionables[selectedIndex])
 }
 
 // executeActionable executes a single actionable item
@@ -665,7 +713,181 @@ func (tp *TaskProcessor) listActionables(actionables []*Actionable) error {
 
 	fmt.Println()
 	tp.formatter.Info("Use the interactive menu to select an action")
-	tp.formatter.Info("Coming soon: --interactive flag for menu selection")
 
 	return nil
 }
+
+// convertActionablesToMenuItems converts actionable items to interactive menu items
+func (tp *TaskProcessor) convertActionablesToMenuItems(actionables []*Actionable) []ui.MenuItem {
+	items := make([]ui.MenuItem, len(actionables))
+
+	for i, actionable := range actionables {
+		// Create a rich description with task and action details
+		description := fmt.Sprintf("Action: %s | Command: %s",
+			actionable.Action.Name,
+			actionable.Action.Command)
+
+		// Add task context if available
+		if actionable.Task != nil {
+			if desc, ok := actionable.Task["description"].(string); ok && desc != "" {
+				description = fmt.Sprintf("Task: %s | %s", desc, description)
+			}
+		}
+
+		items[i] = ui.MenuItem{
+			ID:          fmt.Sprintf("actionable-%d", i),
+			Text:        actionable.Text,
+			Description: description,
+			Data: map[string]any{
+				"actionable": actionable,
+				"command":    actionable.Action.Command,
+				"action":     actionable.Action.Name,
+				"index":      i,
+			},
+			Action: func() error {
+				// This will be handled by the main selection logic
+				return nil
+			},
+		}
+	}
+
+	return items
+}
+
+// createMenuConfig creates a menu configuration optimized for actionable selection
+func (tp *TaskProcessor) createMenuConfig() ui.MenuConfig {
+	config := ui.DefaultMenuConfig()
+
+	// Customize for taskopen actionables
+	config.Title = "🎯 Taskopen Actions"
+	config.ShowDescription = true
+	config.AllowSearch = true
+	config.VimMode = true // Enable vim navigation by default
+	config.MaxItems = 15  // Show more items for better overview
+
+	// Add preview function for commands
+	config.PreviewFunc = tp.createActionablePreview()
+
+	// Customize help
+	config.CustomHelp = "Select an action to execute on the matched annotation"
+
+	return config
+}
+
+// createActionablePreview creates a preview function for actionable commands
+func (tp *TaskProcessor) createActionablePreview() func(ui.MenuItem) string {
+	// Create sanitizer once and reuse it
+	sanitizer := security.NewEnvSanitizer()
+	sanitizer.SetVisibilityLevel(security.VisibilityMasked)
+
+	return func(item ui.MenuItem) string {
+		data, ok := item.Data.(map[string]any)
+		if !ok {
+			return "No preview available"
+		}
+
+		actionable, ok := data["actionable"].(*Actionable)
+		if !ok {
+			return "Invalid actionable data"
+		}
+
+		var preview strings.Builder
+
+		// Command preview (sanitized to hide sensitive info)
+		command := actionable.Action.Command
+		// Expand environment variables for display but sanitize them
+		expandedCommand := tp.expandEnvironmentVars(command, actionable.Environment)
+		preview.WriteString(fmt.Sprintf("📋 Command: %s\n", expandedCommand))
+
+		// Risk assessment
+		risk := tp.assessCommandRisk(actionable.Action.Command)
+		preview.WriteString(fmt.Sprintf("⚠️  Risk Level: %s\n", risk))
+
+		// Task information
+		if actionable.Task != nil {
+			if desc, ok := actionable.Task["description"].(string); ok && desc != "" {
+				preview.WriteString(fmt.Sprintf("📝 Task: %s\n", desc))
+			}
+			if project, ok := actionable.Task["project"].(string); ok && project != "" {
+				preview.WriteString(fmt.Sprintf("📁 Project: %s\n", project))
+			}
+			if priority, ok := actionable.Task["priority"].(string); ok && priority != "" {
+				preview.WriteString(fmt.Sprintf("⭐ Priority: %s\n", priority))
+			}
+		}
+
+		// Environment variables (securely sanitized)
+		if len(actionable.Environment) > 0 {
+			preview.WriteString("\n🔧 Task Variables (Sanitized):\n")
+
+			// Show only important task-related vars, sanitized
+			importantVars := []string{"UUID", "ID", "FILE", "ANNOTATION", "LABEL", "LAST_MATCH"}
+			for _, varName := range importantVars {
+				if value, exists := actionable.Environment[varName]; exists {
+					sanitizedValue := sanitizer.SanitizeValue(varName, value)
+					preview.WriteString(fmt.Sprintf("   %s=%s\n", varName, sanitizedValue))
+				}
+			}
+
+			// Show count of hidden environment variables
+			hiddenCount := len(actionable.Environment) - len(importantVars)
+			if hiddenCount > 0 {
+				preview.WriteString(fmt.Sprintf("\n   🔒 %d environment variables hidden for security\n", hiddenCount))
+			}
+		}
+
+		return preview.String()
+	}
+}
+
+// assessCommandRisk provides basic risk assessment for commands
+func (tp *TaskProcessor) assessCommandRisk(command string) string {
+	cmd := strings.ToLower(command)
+
+	// Critical risk patterns
+	critical := []string{"rm -rf", "format", "dd if="}
+	for _, pattern := range critical {
+		if strings.Contains(cmd, pattern) {
+			return "CRITICAL"
+		}
+	}
+
+	// High risk patterns
+	high := []string{"sudo rm", "rm /", "shutdown", "reboot"}
+	for _, pattern := range high {
+		if strings.Contains(cmd, pattern) {
+			return "HIGH"
+		}
+	}
+
+	// Medium risk patterns
+	medium := []string{"sudo", "rm ", "mv ", "chmod", "chown"}
+	for _, pattern := range medium {
+		if strings.Contains(cmd, pattern) {
+			return "MEDIUM"
+		}
+	}
+
+	return "SAFE"
+}
+
+// getCommandWarnings returns safety warnings for commands
+// func (tp *TaskProcessor) getCommandWarnings(command string) []string {
+// 	var warnings []string
+// 	cmd := strings.ToLower(command)
+//
+// 	if strings.Contains(cmd, "sudo") {
+// 		warnings = append(warnings, "Requires elevated privileges")
+// 	}
+// 	if strings.Contains(cmd, "rm ") {
+// 		warnings = append(warnings, "Will delete files or directories")
+// 	}
+// 	if strings.Contains(cmd, "curl") || strings.Contains(cmd, "wget") {
+// 		warnings = append(warnings, "Will access network resources")
+// 	}
+// 	if strings.Contains(cmd, "chmod") || strings.Contains(cmd, "chown") {
+// 		warnings = append(warnings, "Will modify file permissions")
+// 	}
+//
+// 	return warnings
+// }
