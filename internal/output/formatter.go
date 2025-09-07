@@ -509,8 +509,11 @@ func isColorSupported() bool {
 		return false
 	}
 
-	if os.Getenv("NO_COLOR") != "" {
-		return false
+	// Enhanced terminal detection
+	colorTerms := []string{
+		"xterm", "xterm-256color", "screen", "screen-256color",
+		"tmux", "tmux-256color", "rxvt", "rxvt-unicode",
+		"linux", "cygwin", "putty",
 	}
 
 	// Check for common accessibility tools
