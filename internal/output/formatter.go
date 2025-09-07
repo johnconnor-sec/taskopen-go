@@ -484,8 +484,18 @@ func (f *Formatter) ScreenReaderText(semanticRole, content string) {
 // Utility functions
 
 func isColorSupported() bool {
-	// Check for explicit accessibility settings
-	if os.Getenv("TASKOPEN_ACCESSIBILITY") == "screen-reader" {
+	// Check for explicit accessibility settings first
+	if accessibility := os.Getenv("TASKOPEN_ACCESSIBILITY"); accessibility != "" {
+		switch accessibility {
+		case "screen-reader", "minimal":
+			return false
+		case "high-contrast":
+			return true
+		}
+	}
+
+	// Respect NO_COLOR standard
+	if os.Getenv("NO_COLOR") != "" {
 		return false
 	}
 
