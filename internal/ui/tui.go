@@ -83,7 +83,7 @@ func (m *AdvancedMenu) SetMultiSelect(enabled bool) *AdvancedMenu {
 }
 
 // Show displays the advanced menu and returns the selection
-func (m *AdvancedMenu) Show() (interface{}, error) {
+func (m *AdvancedMenu) Show() (any, error) {
 	// Setup terminal
 	if err := m.setupTerminal(); err != nil {
 		return m.fallbackToSimpleMenu()
@@ -208,7 +208,7 @@ func (m *AdvancedMenu) readKey() (KeyEvent, error) {
 }
 
 // handleKey processes key events and returns result/done status
-func (m *AdvancedMenu) handleKey(key KeyEvent) (interface{}, bool) {
+func (m *AdvancedMenu) handleKey(key KeyEvent) (any, bool) {
 	switch m.mode {
 	case ModeSearch:
 		return m.handleSearchMode(key)
@@ -222,7 +222,7 @@ func (m *AdvancedMenu) handleKey(key KeyEvent) (interface{}, bool) {
 }
 
 // handleInteractiveMode handles keys in normal interactive mode
-func (m *AdvancedMenu) handleInteractiveMode(key KeyEvent) (interface{}, bool) {
+func (m *AdvancedMenu) handleInteractiveMode(key KeyEvent) (any, bool) {
 	switch key.Code {
 	case KeyEscape:
 		return nil, true
@@ -298,7 +298,7 @@ func (m *AdvancedMenu) handleInteractiveMode(key KeyEvent) (interface{}, bool) {
 }
 
 // handleSearchMode handles keys in search mode
-func (m *AdvancedMenu) handleSearchMode(key KeyEvent) (interface{}, bool) {
+func (m *AdvancedMenu) handleSearchMode(key KeyEvent) (any, bool) {
 	switch key.Code {
 	case KeyEscape:
 		m.mode = ModeInteractive
@@ -319,13 +319,13 @@ func (m *AdvancedMenu) handleSearchMode(key KeyEvent) (interface{}, bool) {
 }
 
 // handleHelpMode handles keys in help mode
-func (m *AdvancedMenu) handleHelpMode(key KeyEvent) (interface{}, bool) {
+func (m *AdvancedMenu) handleHelpMode(_ KeyEvent) (any, bool) {
 	m.mode = ModeInteractive
 	return nil, false
 }
 
 // handlePreviewMode handles keys in preview mode
-func (m *AdvancedMenu) handlePreviewMode(key KeyEvent) (interface{}, bool) {
+func (m *AdvancedMenu) handlePreviewMode(key KeyEvent) (any, bool) {
 	switch key.Code {
 	case KeyEscape, KeyLeft:
 		m.mode = ModeInteractive
@@ -427,7 +427,7 @@ func (m *AdvancedMenu) renderSplitView(contentWidth int) {
 		return
 	}
 
-	for i := 0; i < maxDisplay; i++ {
+	for i := range maxDisplay {
 		if i >= len(m.filtered) {
 			break
 		}
@@ -689,7 +689,7 @@ func (m *AdvancedMenu) getPreviewContent() string {
 	return "No preview available"
 }
 
-func (m *AdvancedMenu) fallbackToSimpleMenu() (interface{}, error) {
+func (m *AdvancedMenu) fallbackToSimpleMenu() (any, error) {
 	// Fallback to simple menu if terminal setup fails
 	item, err := ShowSimpleMenu(m.items, m.config.Title)
 	return item, err
