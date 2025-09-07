@@ -504,6 +504,18 @@ func isColorSupported() bool {
 		return true
 	}
 
+	// Check if running in CI/CD environments
+	if isCIEnvironment() {
+		// Most CI environments support color
+		return os.Getenv("CI_NO_COLOR") == ""
+	}
+
+	// Check for common accessibility tools
+	if os.Getenv("NVDA") != "" || os.Getenv("JAWS") != "" || os.Getenv("ORCA") != "" {
+		return false
+	}
+
+	// Check terminal type
 	term := os.Getenv("TERM")
 	if term == "" || term == "dumb" {
 		return false
@@ -516,10 +528,30 @@ func isColorSupported() bool {
 		"linux", "cygwin", "putty",
 	}
 
-	// Check for common accessibility tools
-	if os.Getenv("NVDA") != "" || os.Getenv("JAWS") != "" || os.Getenv("ORCA") != "" {
-		return false
+	for _, colorTerm := range colorTerms {
+		if strings.Contains(term, colorTerm) {
+			return true
+		}
 	}
+
+	// Check if stderr is a terminal
+	return isTerminal(os.Stderr)
+}
+
+// isCIEnvironment checks if running in CI/CD
+func isCIEnvironment() bool {
+	ciVars := []string{
+		"CI", "GITHUB_ACTIONS", "TRAVIS", "CIRCLECI", "GITLAB_CI",
+		"JENKINS_URL", "BUILDKITE", "APPVEYOR", "DRONE", "TF_BUILD",
+	}
+
+	for _, env := range ciVars {
+		if os.Getenv(env) != "" {
+			return true
+		}
+	}
+	return false
+}
 
 	return true
 }
