@@ -553,7 +553,13 @@ func isCIEnvironment() bool {
 	return false
 }
 
-	return true
+// isTerminal checks if a file descriptor is a terminal
+func isTerminal(f *os.File) bool {
+	_, _, errno := syscall.Syscall(syscall.SYS_IOCTL,
+		f.Fd(),
+		uintptr(syscall.TCGETS),
+		0)
+	return errno == 0
 }
 
 func getTerminalWidth() int {
