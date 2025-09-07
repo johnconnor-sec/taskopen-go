@@ -499,7 +499,8 @@ func isColorSupported() bool {
 		return false
 	}
 
-	if os.Getenv("TASKOPEN_ACCESSIBILITY") == "high-contrast" {
+	// Force color if requested
+	if os.Getenv("FORCE_COLOR") != "" {
 		return true
 	}
 
