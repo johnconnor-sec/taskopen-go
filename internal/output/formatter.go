@@ -562,7 +562,9 @@ func isTerminal(f *os.File) bool {
 	return errno == 0
 }
 
+// Dynamic terminal width detection with fallback
 func getTerminalWidth() int {
+	// First check environment variable
 	if width := os.Getenv("COLUMNS"); width != "" {
 		if w, err := strconv.Atoi(width); err == nil && w > 0 {
 			return w
