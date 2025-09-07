@@ -361,6 +361,15 @@ func CheckTaskwarrior(ctx context.Context, taskBinary string) error {
 			WithSuggestion("Ensure Taskwarrior is properly installed")
 	}
 
+	// Validate version format (should be like "3.4.1" or "2.6.0")
+	versionPattern := `^\d+\.\d+(\.\d+)?$`
+	matched, _ := regexp.MatchString(versionPattern, version)
+	if !matched {
+		return errors.New(errors.TaskwarriorNotFound, "Invalid Taskwarrior version format").
+			WithDetails(fmt.Sprintf("Got version: %s", version)).
+			WithSuggestion("Ensure a proper Taskwarrior binary is configured")
+	}
+
 	return nil
 }
 
