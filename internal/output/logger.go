@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -53,12 +54,12 @@ const (
 
 // LogEntry represents a single log entry
 type LogEntry struct {
-	Timestamp time.Time              `json:"timestamp"`
-	Level     LogLevel               `json:"level"`
-	Message   string                 `json:"message"`
-	Fields    map[string]interface{} `json:"fields,omitempty"`
-	Caller    string                 `json:"caller,omitempty"`
-	Error     string                 `json:"error,omitempty"`
+	Timestamp time.Time      `json:"timestamp"`
+	Level     LogLevel       `json:"level"`
+	Message   string         `json:"message"`
+	Fields    map[string]any `json:"fields,omitempty"`
+	Caller    string         `json:"caller,omitempty"`
+	Error     string         `json:"error,omitempty"`
 }
 
 // Logger handles structured logging with multiple outputs and formats
@@ -66,7 +67,7 @@ type Logger struct {
 	level         LogLevel
 	format        LogFormat
 	outputs       []io.Writer
-	fields        map[string]interface{}
+	fields        map[string]any
 	formatter     *Formatter
 	includeCaller bool
 	timeFormat    string
@@ -78,7 +79,7 @@ func NewLogger() *Logger {
 		level:      LogLevelInfo,
 		format:     LogFormatText,
 		outputs:    []io.Writer{os.Stderr},
-		fields:     make(map[string]interface{}),
+		fields:     make(map[string]any),
 		formatter:  NewFormatter(os.Stderr),
 		timeFormat: time.RFC3339,
 	}
@@ -109,21 +110,19 @@ func (l *Logger) SetOutputs(outputs ...io.Writer) *Logger {
 }
 
 // WithField adds a field that will be included in all subsequent log entries
-func (l *Logger) WithField(key string, value interface{}) *Logger {
+func (l *Logger) WithField(key string, value any) *Logger {
 	newLogger := &Logger{
 		level:         l.level,
 		format:        l.format,
 		outputs:       l.outputs,
-		fields:        make(map[string]interface{}),
+		fields:        make(map[string]any),
 		formatter:     l.formatter,
 		includeCaller: l.includeCaller,
 		timeFormat:    l.timeFormat,
 	}
 
 	// Copy existing fields
-	for k, v := range l.fields {
-		newLogger.fields[k] = v
-	}
+	maps.Copy(newLogger.fields, l.fields)
 
 	// Add new field
 	newLogger.fields[key] = value
@@ -132,7 +131,7 @@ func (l *Logger) WithField(key string, value interface{}) *Logger {
 }
 
 // WithFields adds multiple fields
-func (l *Logger) WithFields(fields map[string]interface{}) *Logger {
+func (l *Logger) WithFields(fields map[string]any) *Logger {
 	newLogger := l
 	for k, v := range fields {
 		newLogger = newLogger.WithField(k, v)
@@ -167,7 +166,7 @@ func (l *Logger) SetTimeFormat(format string) *Logger {
 }
 
 // log is the internal logging method
-func (l *Logger) log(level LogLevel, message string, fields ...map[string]interface{}) {
+func (l *Logger) log(level LogLevel, message string, fields ...map[string]any) {
 	if level < l.level {
 		return
 	}
@@ -176,19 +175,15 @@ func (l *Logger) log(level LogLevel, message string, fields ...map[string]interf
 		Timestamp: time.Now(),
 		Level:     level,
 		Message:   message,
-		Fields:    make(map[string]interface{}),
+		Fields:    make(map[string]any),
 	}
 
 	// Add persistent fields
-	for k, v := range l.fields {
-		entry.Fields[k] = v
-	}
+	maps.Copy(entry.Fields, l.fields)
 
 	// Add call-specific fields
 	for _, fieldMap := range fields {
-		for k, v := range fieldMap {
-			entry.Fields[k] = v
-		}
+		maps.Copy(entry.Fields, fieldMap)
 	}
 
 	// Add caller information if enabled
@@ -291,7 +286,7 @@ func (l *Logger) formatLogLevel(level LogLevel) string {
 }
 
 // formatFields formats the log fields for better readability
-func (l *Logger) formatFields(fields map[string]interface{}) string {
+func (l *Logger) formatFields(fields map[string]any) string {
 	if len(fields) == 0 {
 		return ""
 	}
@@ -330,19 +325,15 @@ func (l *Logger) SetFormatter(formatter *Formatter) *Logger {
 }
 
 // Performance logging helpers
-func (l *Logger) LogDuration(operation string, duration time.Duration, fields ...map[string]interface{}) {
-	durationFields := map[string]interface{}{
+func (l *Logger) LogDuration(operation string, duration time.Duration, fields ...map[string]any) {
+	durationFields := map[string]any{
 		"operation": operation,
 		"duration":  duration.String(),
 	}
-
 	// Merge additional fields
 	for _, fieldMap := range fields {
-		for k, v := range fieldMap {
-			durationFields[k] = v
-		}
+		maps.Copy(durationFields, fieldMap)
 	}
-
 	// Choose appropriate log level based on duration
 	if duration > 5*time.Second {
 		l.Warn("Slow operation detected", durationFields)
@@ -364,63 +355,63 @@ func (l *Logger) LogMemoryUsage(component string) {
 }
 
 // Trace logs a trace message
-func (l *Logger) Trace(message string, fields ...map[string]interface{}) {
+func (l *Logger) Trace(message string, fields ...map[string]any) {
 	l.log(LogLevelTrace, message, fields...)
 }
 
 // Debug logs a debug message
-func (l *Logger) Debug(message string, fields ...map[string]interface{}) {
+func (l *Logger) Debug(message string, fields ...map[string]any) {
 	l.log(LogLevelDebug, message, fields...)
 }
 
 // Info logs an info message
-func (l *Logger) Info(message string, fields ...map[string]interface{}) {
+func (l *Logger) Info(message string, fields ...map[string]any) {
 	l.log(LogLevelInfo, message, fields...)
 }
 
 // Warn logs a warning message
-func (l *Logger) Warn(message string, fields ...map[string]interface{}) {
+func (l *Logger) Warn(message string, fields ...map[string]any) {
 	l.log(LogLevelWarn, message, fields...)
 }
 
 // Error logs an error message
-func (l *Logger) Error(message string, fields ...map[string]interface{}) {
+func (l *Logger) Error(message string, fields ...map[string]any) {
 	l.log(LogLevelError, message, fields...)
 }
 
 // Fatal logs a fatal message and exits the program
-func (l *Logger) Fatal(message string, fields ...map[string]interface{}) {
+func (l *Logger) Fatal(message string, fields ...map[string]any) {
 	l.log(LogLevelFatal, message, fields...)
 	os.Exit(1)
 }
 
 // Tracef logs a formatted trace message
-func (l *Logger) Tracef(format string, args ...interface{}) {
+func (l *Logger) Tracef(format string, args ...any) {
 	l.Trace(fmt.Sprintf(format, args...))
 }
 
 // Debugf logs a formatted debug message
-func (l *Logger) Debugf(format string, args ...interface{}) {
+func (l *Logger) Debugf(format string, args ...any) {
 	l.Debug(fmt.Sprintf(format, args...))
 }
 
 // Infof logs a formatted info message
-func (l *Logger) Infof(format string, args ...interface{}) {
+func (l *Logger) Infof(format string, args ...any) {
 	l.Info(fmt.Sprintf(format, args...))
 }
 
 // Warnf logs a formatted warning message
-func (l *Logger) Warnf(format string, args ...interface{}) {
+func (l *Logger) Warnf(format string, args ...any) {
 	l.Warn(fmt.Sprintf(format, args...))
 }
 
 // Errorf logs a formatted error message
-func (l *Logger) Errorf(format string, args ...interface{}) {
+func (l *Logger) Errorf(format string, args ...any) {
 	l.Error(fmt.Sprintf(format, args...))
 }
 
 // Fatalf logs a formatted fatal message and exits
-func (l *Logger) Fatalf(format string, args ...interface{}) {
+func (l *Logger) Fatalf(format string, args ...any) {
 	l.Fatal(fmt.Sprintf(format, args...))
 }
 
@@ -457,51 +448,51 @@ func GetGlobalLogger() *Logger {
 	return globalLogger
 }
 
-// Global logging functions that use the global logger
-func Trace(message string, fields ...map[string]interface{}) {
+// Trace - Global logging functions that use the global logger
+func Trace(message string, fields ...map[string]any) {
 	globalLogger.Trace(message, fields...)
 }
 
-func Debug(message string, fields ...map[string]interface{}) {
+func Debug(message string, fields ...map[string]any) {
 	globalLogger.Debug(message, fields...)
 }
 
-func Info(message string, fields ...map[string]interface{}) {
+func Info(message string, fields ...map[string]any) {
 	globalLogger.Info(message, fields...)
 }
 
-func Warn(message string, fields ...map[string]interface{}) {
+func Warn(message string, fields ...map[string]any) {
 	globalLogger.Warn(message, fields...)
 }
 
-func Error(message string, fields ...map[string]interface{}) {
+func Error(message string, fields ...map[string]any) {
 	globalLogger.Error(message, fields...)
 }
 
-func Fatal(message string, fields ...map[string]interface{}) {
+func Fatal(message string, fields ...map[string]any) {
 	globalLogger.Fatal(message, fields...)
 }
 
-func Tracef(format string, args ...interface{}) {
+func Tracef(format string, args ...any) {
 	globalLogger.Tracef(format, args...)
 }
 
-func Debugf(format string, args ...interface{}) {
+func Debugf(format string, args ...any) {
 	globalLogger.Debugf(format, args...)
 }
 
-func Infof(format string, args ...interface{}) {
+func Infof(format string, args ...any) {
 	globalLogger.Infof(format, args...)
 }
 
-func Warnf(format string, args ...interface{}) {
+func Warnf(format string, args ...any) {
 	globalLogger.Warnf(format, args...)
 }
 
-func Errorf(format string, args ...interface{}) {
+func Errorf(format string, args ...any) {
 	globalLogger.Errorf(format, args...)
 }
 
-func Fatalf(format string, args ...interface{}) {
+func Fatalf(format string, args ...any) {
 	globalLogger.Fatalf(format, args...)
 }

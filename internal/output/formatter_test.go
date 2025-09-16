@@ -2,6 +2,7 @@ package output
 
 import (
 	"bytes"
+	"os"
 	"strings"
 	"testing"
 )
@@ -276,5 +277,236 @@ func TestUtilityFunctions(t *testing.T) {
 	width := getTerminalWidth()
 	if width <= 0 {
 		t.Error("Terminal width should be positive")
+	}
+}
+
+func TestEnhancedTerminalWidth(t *testing.T) {
+	var buf bytes.Buffer
+	f := NewFormatter(&buf)
+
+	// Test dynamic width updating
+	currentWidth := f.GetCurrentWidth()
+	if currentWidth <= 0 {
+		t.Error("Dynamic width should be positive")
+	}
+}
+
+func TestEnhancedColorSupport(t *testing.T) {
+	// Test NO_COLOR environment variable
+	oldNoColor := os.Getenv("NO_COLOR")
+	os.Setenv("NO_COLOR", "1")
+
+	if isColorSupported() {
+		t.Error("Color should be disabled when NO_COLOR is set")
+	}
+
+	// Restore environment
+	if oldNoColor == "" {
+		os.Unsetenv("NO_COLOR")
+	} else {
+		os.Setenv("NO_COLOR", oldNoColor)
+	}
+
+	// Test FORCE_COLOR
+	oldForceColor := os.Getenv("FORCE_COLOR")
+	os.Setenv("FORCE_COLOR", "1")
+
+	if !isColorSupported() {
+		t.Error("Color should be enabled when FORCE_COLOR is set")
+	}
+
+	// Restore environment
+	if oldForceColor == "" {
+		os.Unsetenv("FORCE_COLOR")
+	} else {
+		os.Setenv("FORCE_COLOR", oldForceColor)
+	}
+}
+
+func TestOutputTemplates(t *testing.T) {
+	var buf bytes.Buffer
+	f := NewFormatter(&buf)
+	f.SetColorOutput(false)
+
+	// Test task rendering with templates
+	tasks := []map[string]interface{}{
+		{
+			"id":          1,
+			"priority":    "H",
+			"project":     "test",
+			"description": "Test task",
+			"due":         "2025-09-05",
+		},
+		{
+			"id":          2,
+			"priority":    "L",
+			"project":     "demo",
+			"description": "Demo task",
+		},
+	}
+
+	// Test default template
+	f.RenderTaskList(tasks)
+	output := buf.String()
+
+	if !strings.Contains(output, "Test task") {
+		t.Error("Task description not found in default template output")
+	}
+	if !strings.Contains(output, "Found 2 tasks") {
+		t.Error("Task count not found")
+	}
+
+	// Test compact template
+	buf.Reset()
+	f.RenderTaskListWithTemplate(tasks, CompactTaskTemplate)
+	compactOutput := buf.String()
+
+	if !strings.Contains(compactOutput, "Test task") {
+		t.Error("Task description not found in compact template output")
+	}
+}
+
+func TestMultiProgress(t *testing.T) {
+	var buf bytes.Buffer
+	f := NewFormatter(&buf)
+	f.SetColorOutput(false)
+
+	mp := f.NewMultiProgress()
+	bar1 := mp.AddProgress("task1", "Processing files", 100)
+	_ = mp.AddProgress("task2", "Uploading data", 50) // bar2 for testing setup
+
+	// Test initial state
+	if bar1.current != 0 || bar1.total != 100 {
+		t.Error("Progress bar initial state incorrect")
+	}
+
+	// Test updates
+	mp.Update("task1", 25, "Processing files (25%)")
+	mp.Update("task2", 10, "")
+
+	if mp.bars["task1"].current != 25 {
+		t.Error("Progress bar update failed")
+	}
+
+	// Test completion
+	mp.Update("task1", 100, "Complete")
+	if !mp.bars["task1"].finished {
+		t.Error("Progress bar should be marked as finished")
+	}
+}
+
+func TestStatusLine(t *testing.T) {
+	var buf bytes.Buffer
+	f := NewFormatter(&buf)
+	f.SetColorOutput(false)
+
+	sl := f.NewStatusLine()
+
+	// Test status updates
+	sl.Update("Processing %d items", 10)
+	if !sl.active {
+		t.Error("Status line should be active after update")
+	}
+
+	// Test success completion
+	sl.Success("Processing complete")
+	if sl.active {
+		t.Error("Status line should be inactive after success")
+	}
+
+	// Test error completion
+	sl.Update("Processing items...")
+	sl.Error("Processing failed")
+	if sl.active {
+		t.Error("Status line should be inactive after error")
+	}
+}
+
+func TestAccessibilityModes(t *testing.T) {
+	var buf bytes.Buffer
+	f := NewFormatter(&buf)
+
+	// Test accessibility mode switching
+	f.SetAccessibilityMode(AccessibilityScreenReader)
+	if f.colorOutput {
+		t.Error("Color output should be disabled in screen reader mode")
+	}
+
+	f.SetAccessibilityMode(AccessibilityHighContrast)
+	if !f.colorOutput {
+		t.Error("Color output should be enabled in high contrast mode")
+	}
+	if f.theme.Primary != ColorBrightWhite {
+		t.Error("High contrast theme not applied")
+	}
+
+	// Test screen reader output
+	f.SetAccessibilityMode(AccessibilityScreenReader)
+	f.ScreenReaderText("error", "Test error message")
+	output := buf.String()
+
+	if !strings.Contains(output, "ERROR: Test error message") {
+		t.Error("Screen reader format not applied")
+	}
+}
+
+func TestFieldTransforms(t *testing.T) {
+	var buf bytes.Buffer
+	f := NewFormatter(&buf)
+
+	// Test priority transform
+	result := f.transformPriorityDisplay("H")
+	if result != "HIGH" {
+		t.Error("Priority transform failed")
+	}
+
+	// Test case transforms
+	result = f.applyFieldTransform("hello", "upper")
+	if result != "HELLO" {
+		t.Error("Upper transform failed")
+	}
+
+	result = f.applyFieldTransform("WORLD", "lower")
+	if result != "world" {
+		t.Error("Lower transform failed")
+	}
+
+	// Test truncate transform
+	result = f.applyFieldTransform("very long text", "truncate:8")
+	if len(result) > 8 {
+		t.Error("Truncate transform failed")
+	}
+}
+
+func TestDiagnosticsRendering(t *testing.T) {
+	var buf bytes.Buffer
+	f := NewFormatter(&buf)
+	f.SetColorOutput(false)
+
+	diagnostics := []DiagnosticInfo{
+		{
+			Component: "Taskwarrior",
+			Status:    "✓ Ready",
+			Details:   map[string]interface{}{"version": "2.6.0"},
+		},
+		{
+			Component:   "Config",
+			Status:      "⚠ Warning",
+			Details:     map[string]interface{}{"file": "/home/user/.taskrc"},
+			Suggestions: []string{"Check configuration syntax"},
+		},
+	}
+
+	f.RenderDiagnostics(diagnostics)
+	output := buf.String()
+
+	if !strings.Contains(output, "System Diagnostics") {
+		t.Error("Diagnostics header not found")
+	}
+	if !strings.Contains(output, "Taskwarrior") {
+		t.Error("Component name not found")
+	}
+	if !strings.Contains(output, "Check configuration syntax") {
+		t.Error("Suggestion not found")
 	}
 }
