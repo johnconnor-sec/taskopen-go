@@ -1,7 +1,3 @@
-/*
-* Split this file up
-* Too big
- */
 package output
 
 import (
