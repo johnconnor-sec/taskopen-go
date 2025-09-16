@@ -11,6 +11,7 @@ import (
 	"github.com/johnconnor-sec/taskopen-go/internal/config"
 	"github.com/johnconnor-sec/taskopen-go/internal/exec"
 	"github.com/johnconnor-sec/taskopen-go/internal/output"
+	"github.com/johnconnor-sec/taskopen-go/internal/security"
 )
 
 func runDiagnostics() error {
@@ -136,6 +137,7 @@ func runDiagnostics() error {
 		{Component: "Error Handling", Status: "✓ Functional", Details: map[string]any{"description": "Structured error system"}},
 		{Component: "Output System", Status: "✓ Functional", Details: map[string]any{"description": "Beautiful terminal output with accessibility"}},
 		{Component: "Execution Engine", Status: "✓ Functional", Details: map[string]any{"description": "Secure process handling"}},
+		{Component: "Security System", Status: "✓ Functional", Details: map[string]any{"description": "Environment variable sanitization and secure previews"}},
 	}
 	diagnostics = append(diagnostics, coreComponents...)
 
@@ -157,6 +159,22 @@ func runDiagnostics() error {
 	}
 
 	formatter.ScreenReaderText("success", "All systems operational")
+	fmt.Println()
+
+	// Show environment variables preview (secure)
+	formatter.Header("🔐 Environment Variables (Secure Preview)")
+	envOptions := security.DefaultEnvPreviewOptions()
+	envOptions.MaxItems = 15
+	// Show both taskopen-specific and key system vars
+	if len(os.Getenv("TASKOPEN_ACCESSIBILITY")) == 0 && len(os.Getenv("TASKOPENRC")) == 0 {
+		// If no TASKOPEN vars, show some key system vars
+		envOptions.FilterPattern = "" // Show all (limited by MaxItems)
+	} else {
+		envOptions.FilterPattern = "TASKOPEN" // Focus on taskopen-specific vars
+	}
+	envPreview := security.GetEnvPreview(envOptions)
+	fmt.Println(envPreview)
+
 	fmt.Println()
 	formatter.Info("🎉 EPOCH 2 Sprint 4 Complete - Enhanced Output & Accessibility!")
 

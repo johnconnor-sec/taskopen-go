@@ -1,7 +1,8 @@
-// Package ui provides simplified preview functionality
+// Package ui provides advanced preview functionality for interactive menus
 package ui
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,12 +12,41 @@ import (
 
 	"github.com/johnconnor-sec/taskopen-go/internal/exec"
 	"github.com/johnconnor-sec/taskopen-go/internal/output"
+	"github.com/johnconnor-sec/taskopen-go/internal/security"
+	"github.com/johnconnor-sec/taskopen-go/internal/taskwarrior"
 )
 
 // SimplePreview provides basic command previews
 type SimplePreview struct {
 	formatter *output.Formatter
 	executor  *exec.Executor
+}
+
+// AdvancedPreview provides comprehensive command previews with dry-run capabilities
+type AdvancedPreview struct {
+	formatter   *output.Formatter
+	executor    *exec.Executor
+	taskwarrior *taskwarrior.Client
+	cache       map[string]*PreviewInfo // Cache for performance
+}
+
+// PreviewMode defines different preview modes
+type PreviewMode int
+
+const (
+	PreviewBasic PreviewMode = iota
+	PreviewDetailed
+	PreviewDryRun
+	PreviewInteractive
+)
+
+// PreviewOptions configures the preview behavior
+type PreviewOptions struct {
+	Mode        PreviewMode
+	ShowRisks   bool
+	ShowOutput  bool
+	ShowContext bool
+	Timeout     time.Duration
 }
 
 // NewSimplePreview creates a simple preview engine
@@ -118,6 +148,17 @@ func (sp *SimplePreview) extractFilePath(command string) string {
 	return ""
 }
 
+// extractFilePath for AdvancedPreview (same implementation)
+func (ap *AdvancedPreview) extractFilePath(command string) string {
+	// Look for file-like patterns
+	filePattern := regexp.MustCompile(`[~./][^\s]*\.[a-zA-Z0-9]+`)
+	matches := filePattern.FindStringSubmatch(command)
+	if len(matches) > 0 {
+		return matches[0]
+	}
+	return ""
+}
+
 // getFileInfo retrieves basic file information
 func (sp *SimplePreview) getFileInfo(filePath string) *FileInfo {
 	if strings.HasPrefix(filePath, "~/") {
@@ -165,8 +206,11 @@ func (sp *SimplePreview) RenderPreview(preview *PreviewInfo) {
 	// Variables
 	if len(preview.Variables) > 0 {
 		fmt.Println("\nVariables:")
+		sanitizer := security.NewEnvSanitizer()
 		for k, v := range preview.Variables {
-			fmt.Printf("  $%s = %s\n", k, v)
+			// Sanitize variable value for display
+			safeValue := sanitizer.SanitizeValue(k, v)
+			fmt.Printf("  $%s = %s\n", k, safeValue)
 		}
 	}
 
@@ -231,6 +275,360 @@ func CreatePreviewFunction() func(MenuItem) string {
 		if previewInfo.FileInfo != nil && previewInfo.FileInfo.Exists {
 			result.WriteString(fmt.Sprintf("File: %s (%d bytes)\n",
 				previewInfo.FileInfo.Path, previewInfo.FileInfo.Size))
+		}
+
+		return result.String()
+	}
+}
+
+// NewAdvancedPreview creates an advanced preview engine with dry-run capabilities
+func NewAdvancedPreview() *AdvancedPreview {
+	return &AdvancedPreview{
+		formatter: output.NewFormatter(os.Stdout),
+		executor:  exec.New(exec.ExecutionOptions{Timeout: 3 * time.Second, CaptureOutput: true}),
+		cache:     make(map[string]*PreviewInfo),
+	}
+}
+
+// DryRunPreview performs a safe dry-run of the command to show its effects
+func (ap *AdvancedPreview) DryRunPreview(command string, variables map[string]string) (*PreviewInfo, error) {
+	// Check cache first for performance
+	cacheKey := fmt.Sprintf("%s:%v", command, variables)
+	if cached, exists := ap.cache[cacheKey]; exists {
+		return cached, nil
+	}
+
+	preview := &PreviewInfo{
+		Command:   command,
+		Variables: variables,
+		RiskLevel: ap.assessRiskAdvanced(command),
+		Safety:    ap.checkSafetyAdvanced(command),
+	}
+
+	// Try to create a safe dry-run version of the command
+	dryRunCmd := ap.createDryRunCommand(command)
+	if dryRunCmd != "" {
+		// Execute dry-run to show potential effects
+		if output, err := ap.executeSafely(dryRunCmd, variables); err == nil {
+			preview.Description = fmt.Sprintf("Dry-run output:\n%s", output)
+		}
+	}
+
+	// Cache the result
+	ap.cache[cacheKey] = preview
+	return preview, nil
+}
+
+// createDryRunCommand attempts to create a safe dry-run version of a command
+func (ap *AdvancedPreview) createDryRunCommand(command string) string {
+	cmd := strings.TrimSpace(strings.ToLower(command))
+
+	// Map dangerous commands to safe alternatives
+	dryRunMappings := map[string]string{
+		"rm ":      "ls -la ", // Show files that would be deleted
+		"del ":     "dir ",    // Windows equivalent
+		"git rm":   "git ls-files ",
+		"git push": "git log --oneline -5", // Show commits that would be pushed
+		"mv ":      "ls -la ",              // Show files that would be moved
+		"cp ":      "ls -la ",              // Show files that would be copied
+	}
+
+	for dangerous, safe := range dryRunMappings {
+		if strings.HasPrefix(cmd, dangerous) {
+			return strings.Replace(command, dangerous, safe, 1)
+		}
+	}
+
+	// For edit commands, just check if file exists
+	if strings.Contains(cmd, "vim") || strings.Contains(cmd, "nano") || strings.Contains(cmd, "emacs") {
+		filePath := ap.extractFilePath(command)
+		if filePath != "" {
+			return fmt.Sprintf("ls -la %s", filePath)
+		}
+	}
+
+	// For web commands, just parse the URL
+	if strings.Contains(cmd, "curl") || strings.Contains(cmd, "wget") {
+		return "echo '[DRY RUN] Would access network'"
+	}
+
+	return "" // No safe dry-run available
+}
+
+// executeSafely runs a command safely with timeout and output capture
+func (ap *AdvancedPreview) executeSafely(command string, variables map[string]string) (string, error) {
+	// Replace variables in command
+	expandedCmd := command
+	for k, v := range variables {
+		expandedCmd = strings.ReplaceAll(expandedCmd, fmt.Sprintf("$%s", k), v)
+		expandedCmd = strings.ReplaceAll(expandedCmd, fmt.Sprintf("${%s}", k), v)
+	}
+
+	// Parse command into parts
+	parts := strings.Fields(expandedCmd)
+	if len(parts) == 0 {
+		return "", fmt.Errorf("empty command")
+	}
+
+	// Use context with short timeout for safety
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	// Execute with output capture
+	result, err := ap.executor.Execute(ctx, parts[0], parts[1:], &exec.ExecutionOptions{
+		CaptureOutput: true,
+		Timeout:       3 * time.Second,
+	})
+	if err != nil {
+		return "", err
+	}
+
+	return result.Stdout, nil
+}
+
+// assessRiskAdvanced provides enhanced risk assessment
+func (ap *AdvancedPreview) assessRiskAdvanced(command string) string {
+	cmd := strings.ToLower(command)
+
+	// Critical risk patterns
+	critical := []string{
+		"rm -rf", "rm -r /", "del /s", "format c:", "dd if=",
+		"chmod 777", "chown -R", "sudo rm -rf",
+	}
+
+	// High risk patterns
+	high := []string{
+		"sudo ", "> /dev", "shutdown", "reboot", "systemctl stop",
+		"service stop", "kill -9", "pkill", "killall",
+	}
+
+	// Medium risk patterns
+	medium := []string{
+		"chmod", "chown", "mv ", "git push", "git reset --hard",
+		"npm publish", "docker run", "ssh ", "scp ",
+	}
+
+	for _, pattern := range critical {
+		if strings.Contains(cmd, pattern) {
+			return "CRITICAL"
+		}
+	}
+
+	for _, pattern := range high {
+		if strings.Contains(cmd, pattern) {
+			return "HIGH"
+		}
+	}
+
+	for _, pattern := range medium {
+		if strings.Contains(cmd, pattern) {
+			return "MEDIUM"
+		}
+	}
+
+	return "SAFE"
+}
+
+// checkSafetyAdvanced performs comprehensive safety checks
+func (ap *AdvancedPreview) checkSafetyAdvanced(command string) []string {
+	var warnings []string
+	cmd := strings.ToLower(command)
+
+	// System modification warnings
+	if strings.Contains(cmd, "sudo") {
+		warnings = append(warnings, "Requires elevated privileges - may modify system")
+	}
+
+	if strings.Contains(cmd, "rm ") || strings.Contains(cmd, "del ") {
+		warnings = append(warnings, "Will permanently delete files/directories")
+	}
+
+	if strings.Contains(cmd, "chmod") || strings.Contains(cmd, "chown") {
+		warnings = append(warnings, "Will modify file permissions or ownership")
+	}
+
+	// Network access warnings
+	if strings.Contains(cmd, "curl") || strings.Contains(cmd, "wget") || strings.Contains(cmd, "ssh") {
+		warnings = append(warnings, "Will access network resources")
+	}
+
+	// Service management warnings
+	if strings.Contains(cmd, "systemctl") || strings.Contains(cmd, "service") {
+		warnings = append(warnings, "Will modify system services")
+	}
+
+	// Process management warnings
+	if strings.Contains(cmd, "kill") || strings.Contains(cmd, "pkill") {
+		warnings = append(warnings, "Will terminate running processes")
+	}
+
+	// Package management warnings
+	if strings.Contains(cmd, "apt ") || strings.Contains(cmd, "yum ") || strings.Contains(cmd, "npm install") {
+		warnings = append(warnings, "Will install/modify system packages")
+	}
+
+	// Git warnings
+	if strings.Contains(cmd, "git push") {
+		warnings = append(warnings, "Will publish changes to remote repository")
+	}
+
+	if strings.Contains(cmd, "git reset --hard") {
+		warnings = append(warnings, "Will permanently discard local changes")
+	}
+
+	// Docker warnings
+	if strings.Contains(cmd, "docker run") {
+		warnings = append(warnings, "Will run containerized application")
+	}
+
+	if len(warnings) == 0 {
+		warnings = append(warnings, "No significant risks detected - command appears safe")
+	}
+
+	return warnings
+}
+
+// RenderAdvancedPreview displays comprehensive preview information
+func (ap *AdvancedPreview) RenderAdvancedPreview(preview *PreviewInfo, options PreviewOptions) {
+	ap.formatter.Subheader("🔍 Advanced Command Preview")
+
+	// Risk assessment with enhanced colors and icons
+	switch preview.RiskLevel {
+	case "SAFE":
+		ap.formatter.Success("✅ Risk Level: %s", preview.RiskLevel)
+	case "MEDIUM":
+		ap.formatter.Warning("⚠️  Risk Level: %s", preview.RiskLevel)
+	case "HIGH":
+		ap.formatter.Error("🔥 Risk Level: %s", preview.RiskLevel)
+	case "CRITICAL":
+		ap.formatter.Error("💀 Risk Level: %s", preview.RiskLevel)
+	}
+
+	// Command details
+	fmt.Printf("\n📋 Command: %s\n", preview.Command)
+
+	// Show context if requested (with security sanitization)
+	if options.ShowContext && len(preview.Variables) > 0 {
+		fmt.Println("\n🔧 Environment Variables:")
+		sanitizer := security.NewEnvSanitizer()
+		for k, v := range preview.Variables {
+			// Sanitize variable value for display
+			safeValue := sanitizer.SanitizeValue(k, v)
+			fmt.Printf("   $%s = %s\n", k, safeValue)
+		}
+	}
+
+	// Enhanced safety information
+	if options.ShowRisks && len(preview.Safety) > 0 {
+		fmt.Println("\n🛡️  Safety Analysis:")
+		for _, warning := range preview.Safety {
+			if strings.Contains(warning, "No significant risks") || strings.Contains(warning, "appears safe") {
+				ap.formatter.Success("   ✅ %s", warning)
+			} else {
+				ap.formatter.Warning("   ⚠️  %s", warning)
+			}
+		}
+	}
+
+	// Show dry-run output if available
+	if options.ShowOutput && preview.Description != "" && strings.Contains(preview.Description, "Dry-run") {
+		fmt.Println("\n🧪 Dry-run Preview:")
+		ap.formatter.Info("%s", strings.TrimPrefix(preview.Description, "Dry-run output:\n"))
+	}
+
+	// Enhanced file information
+	if preview.FileInfo != nil {
+		fmt.Println("\n📁 File Information:")
+		fmt.Printf("   Path: %s\n", preview.FileInfo.Path)
+		if preview.FileInfo.Exists {
+			ap.formatter.Success("   Status: File exists")
+			fmt.Printf("   Size: %d bytes\n", preview.FileInfo.Size)
+
+			if options.ShowOutput && preview.FileInfo.Content != "" && len(preview.FileInfo.Content) < 200 {
+				fmt.Println("   Preview:")
+				lines := strings.Split(preview.FileInfo.Content, "\n")
+				for i, line := range lines {
+					if i >= 5 { // Limit preview to 5 lines
+						fmt.Printf("   ... (%d more lines)\n", len(lines)-5)
+						break
+					}
+					fmt.Printf("   │ %s\n", line)
+				}
+			}
+		} else {
+			ap.formatter.Warning("   Status: File not found")
+		}
+	}
+
+	fmt.Println()
+}
+
+// CreateAdvancedPreviewFunction returns an enhanced preview function
+func CreateAdvancedPreviewFunction(options PreviewOptions) func(MenuItem) string {
+	preview := NewAdvancedPreview()
+
+	return func(item MenuItem) string {
+		// Extract command information
+		command := item.Text
+		if data, ok := item.Data.(map[string]interface{}); ok {
+			if cmd, exists := data["command"]; exists {
+				command = fmt.Sprintf("%v", cmd)
+			}
+		}
+
+		// Create environment variables
+		variables := map[string]string{
+			"ITEM_ID":   item.ID,
+			"ITEM_TEXT": item.Text,
+			"ITEM_DESC": item.Description,
+		}
+
+		// Generate advanced preview
+		previewInfo, err := preview.DryRunPreview(command, variables)
+		if err != nil {
+			return fmt.Sprintf("Preview error: %s", err.Error())
+		}
+
+		// Build enhanced preview string
+		var result strings.Builder
+
+		// Risk indicator
+		riskIcon := "✅"
+		switch previewInfo.RiskLevel {
+		case "MEDIUM":
+			riskIcon = "⚠️"
+		case "HIGH", "CRITICAL":
+			riskIcon = "🔥"
+		}
+
+		result.WriteString(fmt.Sprintf("%s %s Risk: %s\n", riskIcon,
+			strings.ToUpper(previewInfo.RiskLevel), previewInfo.RiskLevel))
+		result.WriteString(fmt.Sprintf("📋 Command: %s\n", previewInfo.Command))
+
+		// Key warnings only
+		criticalWarnings := 0
+		for _, warning := range previewInfo.Safety {
+			if !strings.Contains(warning, "No significant risks") && !strings.Contains(warning, "appears safe") {
+				if criticalWarnings == 0 {
+					result.WriteString("\n⚠️  Warnings:\n")
+				}
+				if criticalWarnings < 3 { // Limit to 3 warnings in preview
+					result.WriteString(fmt.Sprintf("   • %s\n", warning))
+				}
+				criticalWarnings++
+			}
+		}
+
+		if criticalWarnings > 3 {
+			result.WriteString(fmt.Sprintf("   ... and %d more warnings\n", criticalWarnings-3))
+		}
+
+		// Show dry-run output if available and brief
+		if previewInfo.Description != "" && strings.Contains(previewInfo.Description, "Dry-run") {
+			output := strings.TrimPrefix(previewInfo.Description, "Dry-run output:\n")
+			if len(output) < 200 {
+				result.WriteString(fmt.Sprintf("\n🧪 Preview: %s\n", strings.TrimSpace(output)))
+			}
 		}
 
 		return result.String()

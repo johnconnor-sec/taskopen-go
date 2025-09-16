@@ -1,6 +1,7 @@
 package search
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -312,5 +313,299 @@ func TestFuzzy_ScoreCalculation(t *testing.T) {
 	}
 	if match2.Score <= 0 || match2.Score > 1 {
 		t.Errorf("Expected reasonable score between 0 and 1, got %f", match2.Score)
+	}
+}
+
+// Performance benchmarks for fuzzy search optimization
+func BenchmarkFuzzy_SingleMatch(b *testing.B) {
+	fuzzy := NewFuzzy()
+	query := "test"
+	text := "this is a test string for benchmarking"
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		fuzzy.Match(query, text)
+	}
+}
+
+func BenchmarkFuzzy_SearchSmall(b *testing.B) {
+	fuzzy := NewFuzzy()
+	query := "edit"
+	texts := []string{
+		"edit file", "open editor", "file manager", "text editor",
+		"image editor", "video editor", "config editor", "edit settings",
+		"quick edit", "batch edit", "edit mode", "editor preferences",
+		"code editor", "markdown editor", "html editor", "css editor",
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		fuzzy.Search(query, texts)
+	}
+}
+
+func BenchmarkFuzzy_SearchMedium(b *testing.B) {
+	fuzzy := NewFuzzy()
+	query := "task"
+
+	// Generate 100 items
+	texts := make([]string, 100)
+	for i := 0; i < 100; i++ {
+		texts[i] = generateTaskText(i)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		fuzzy.Search(query, texts)
+	}
+}
+
+func BenchmarkFuzzy_SearchLarge(b *testing.B) {
+	fuzzy := NewFuzzy()
+	query := "config"
+
+	// Generate 1000 items
+	texts := make([]string, 1000)
+	for i := 0; i < 1000; i++ {
+		texts[i] = generateTaskText(i)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		fuzzy.Search(query, texts)
+	}
+}
+
+func BenchmarkFuzzy_SearchVeryLarge(b *testing.B) {
+	fuzzy := NewFuzzy()
+	query := "urgent"
+
+	// Generate 5000 items (stress test)
+	texts := make([]string, 5000)
+	for i := 0; i < 5000; i++ {
+		texts[i] = generateTaskText(i)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		fuzzy.Search(query, texts)
+	}
+}
+
+func BenchmarkFuzzy_SmartMatch(b *testing.B) {
+	fuzzy := NewFuzzy()
+	query := "edit file"
+	text := "quickly edit the configuration file today"
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		fuzzy.SmartMatch(query, text)
+	}
+}
+
+func BenchmarkFuzzy_SearchItems(b *testing.B) {
+	fuzzy := NewFuzzy()
+	query := "task"
+
+	items := make([]Searchable, 1000)
+	for i := 0; i < 1000; i++ {
+		items[i] = TestSearchable{
+			searchText:  generateTaskText(i),
+			displayText: "Task #" + string(rune('0'+(i%10))),
+		}
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		fuzzy.SearchItems(query, items)
+	}
+}
+
+// Helper function to generate varied test data
+func generateTaskText(i int) string {
+	templates := []string{
+		"urgent task #%d needs completion",
+		"configure project settings for item %d",
+		"edit file %d in the project directory",
+		"review and update documentation %d",
+		"test functionality in module %d",
+		"deploy changes to environment %d",
+		"analyze performance metrics %d",
+		"optimize query execution %d",
+		"implement feature request %d",
+		"fix bug report number %d",
+		"schedule meeting for task %d",
+		"coordinate team effort %d",
+		"research new technology %d",
+		"write unit tests for %d",
+		"update dependencies %d",
+		"monitor system health %d",
+		"backup important data %d",
+		"clean up temporary files %d",
+		"organize project structure %d",
+		"document api changes %d",
+	}
+
+	template := templates[i%len(templates)]
+	return fmt.Sprintf(template, i)
+}
+
+func BenchmarkFuzzy_RealWorldScenario(b *testing.B) {
+	fuzzy := NewFuzzy().SetMinScore(0.1)
+
+	// Simulate real taskwarrior data
+	realWorldTexts := []string{
+		"Buy groceries at the store", "Call mom about dinner plans",
+		"Fix the leaking faucet", "Schedule dentist appointment",
+		"Review quarterly budget", "Update project timeline",
+		"Prepare presentation slides", "Book flight tickets",
+		"Clean garage this weekend", "Pay monthly bills online",
+		"Exercise at the gym", "Read chapter 5 of book",
+		"Water the plants", "Backup computer files",
+		"Order new office supplies", "Plan vacation itinerary",
+		"Research new programming language", "Write blog post",
+		"Organize photo collection", "Learn guitar chords",
+		"Study for certification exam", "Volunteer at local shelter",
+		"Repair bicycle tire", "Download software updates",
+		"Visit art museum exhibition", "Plant spring vegetables",
+		"Configure home network", "Practice foreign language",
+		"Meditate for 20 minutes", "Attend networking event",
+	}
+
+	queries := []string{"call", "fix", "update", "plan", "study", "config"}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		query := queries[i%len(queries)]
+		fuzzy.Search(query, realWorldTexts)
+	}
+}
+
+func BenchmarkFuzzy_SearchWithLimit(b *testing.B) {
+	fuzzy := NewFuzzy()
+	query := "task"
+
+	// Generate 1000 items
+	texts := make([]string, 1000)
+	for i := 0; i < 1000; i++ {
+		texts[i] = generateTaskText(i)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		fuzzy.SearchWithLimit(query, texts, 10) // Only return top 10 results
+	}
+}
+
+func BenchmarkFuzzy_SearchAsync(b *testing.B) {
+	fuzzy := NewFuzzy()
+	query := "config"
+
+	texts := make([]string, 500)
+	for i := 0; i < 500; i++ {
+		texts[i] = generateTaskText(i)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		results := make(chan Match, 100)
+		done := make(chan struct{})
+
+		go fuzzy.SearchAsync(query, texts, results, done)
+
+		// Consume results
+		for {
+			select {
+			case <-results:
+				// Process result
+			case <-done:
+				goto next
+			}
+		}
+	next:
+	}
+}
+
+func BenchmarkFuzzy_NormalizationCached(b *testing.B) {
+	fuzzy := NewFuzzy()
+	texts := []string{
+		"This is a test string",
+		"Another Test String",
+		"this is a test string", // Same as first when normalized
+		"ANOTHER TEST STRING",   // Same as second when normalized
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		text := texts[i%len(texts)]
+		fuzzy.normalize(text)
+	}
+}
+
+func TestFuzzy_SearchWithLimit(t *testing.T) {
+	fuzzy := NewFuzzy()
+	texts := []string{
+		"hello world", "hello there", "hi everyone",
+		"goodbye world", "testing hello", "another hello",
+		"more hello items", "final hello test",
+	}
+
+	matches := fuzzy.SearchWithLimit("hello", texts, 3)
+
+	if len(matches) > 3 {
+		t.Errorf("Expected at most 3 matches, got %d", len(matches))
+	}
+
+	// Results should still be sorted by score
+	for i := 1; i < len(matches); i++ {
+		if matches[i-1].Score < matches[i].Score {
+			t.Error("Results should be sorted by score (highest first)")
+		}
+	}
+}
+
+func TestFuzzy_SearchAsync(t *testing.T) {
+	fuzzy := NewFuzzy()
+	texts := []string{
+		"hello world", "hello there", "hi everyone",
+		"goodbye world", "testing hello",
+	}
+
+	results := make(chan Match, 10)
+	done := make(chan struct{})
+
+	go fuzzy.SearchAsync("hello", texts, results, done)
+
+	var matches []Match
+	collecting := true
+	for collecting {
+		select {
+		case match, ok := <-results:
+			if !ok {
+				collecting = false
+			} else {
+				matches = append(matches, match)
+			}
+		case <-done:
+			// Drain any remaining results
+			for {
+				select {
+				case match, ok := <-results:
+					if !ok {
+						collecting = false
+						goto finished
+					}
+					matches = append(matches, match)
+				default:
+					collecting = false
+					goto finished
+				}
+			}
+		}
+	}
+
+finished:
+	if len(matches) < 3 {
+		t.Errorf("Expected at least 3 matches, got %d", len(matches))
 	}
 }

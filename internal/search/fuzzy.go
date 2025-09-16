@@ -3,8 +3,20 @@ package search
 import (
 	"sort"
 	"strings"
+	"sync"
 	"unicode"
 )
+
+// Performance optimization: cache normalized strings
+var normalizeCache sync.Map // map[string]string
+
+// min returns the minimum of two integers
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
 
 // Match represents a fuzzy search match with score and positions
 type Match struct {
@@ -95,7 +107,12 @@ func (f *Fuzzy) Match(query, text string) (*Match, bool) {
 
 // Search performs fuzzy search across multiple strings
 func (f *Fuzzy) Search(query string, texts []string) []Match {
-	var matches []Match
+	if len(texts) == 0 {
+		return []Match{}
+	}
+
+	// Pre-allocate slice with estimated capacity for better memory performance
+	matches := make([]Match, 0, min(len(texts)/4, 50))
 
 	for _, text := range texts {
 		if match, ok := f.Match(query, text); ok {
@@ -115,8 +132,57 @@ func (f *Fuzzy) Search(query string, texts []string) []Match {
 	return matches
 }
 
+// SearchWithLimit performs fuzzy search with a result limit for better performance
+func (f *Fuzzy) SearchWithLimit(query string, texts []string, limit int) []Match {
+	if len(texts) == 0 || limit <= 0 {
+		return []Match{}
+	}
+
+	matches := make([]Match, 0, min(limit*2, 100)) // Buffer for better matches
+
+	for _, text := range texts {
+		if match, ok := f.Match(query, text); ok {
+			matches = append(matches, *match)
+		}
+	}
+
+	// Sort by score (highest first)
+	sort.Slice(matches, func(i, j int) bool {
+		if matches[i].Score == matches[j].Score {
+			return len(matches[i].Text) < len(matches[j].Text)
+		}
+		return matches[i].Score > matches[j].Score
+	})
+
+	// Return limited results
+	if len(matches) > limit {
+		return matches[:limit]
+	}
+	return matches
+}
+
+// SearchAsync performs fuzzy search with channel-based results for real-time UX
+func (f *Fuzzy) SearchAsync(query string, texts []string, results chan<- Match, done chan<- struct{}) {
+	defer close(done)
+	defer close(results)
+
+	if len(texts) == 0 {
+		return
+	}
+
+	for _, text := range texts {
+		if match, ok := f.Match(query, text); ok {
+			select {
+			case results <- *match:
+			default:
+				// Channel full, skip to prevent blocking
+			}
+		}
+	}
+}
+
 // SearchMap performs fuzzy search across a map of string keys
-func (f *Fuzzy) SearchMap(query string, items map[string]interface{}) []MapMatch {
+func (f *Fuzzy) SearchMap(query string, items map[string]any) []MapMatch {
 	var matches []MapMatch
 
 	for key, value := range items {
@@ -143,26 +209,42 @@ func (f *Fuzzy) SearchMap(query string, items map[string]interface{}) []MapMatch
 // MapMatch represents a fuzzy search match in a map
 type MapMatch struct {
 	Key   string
-	Value interface{}
+	Value any
 	Match Match
 }
 
-// normalize normalizes text for matching
+// normalize normalizes text for matching with caching for performance
 func (f *Fuzzy) normalize(text string) string {
+	// Create cache key based on text and normalization settings
+	cacheKey := text
+	if f.caseSensitive {
+		cacheKey += ":cs"
+	}
+	if f.normalizeSpaces {
+		cacheKey += ":ns"
+	}
+
+	// Check cache first
+	if cached, ok := normalizeCache.Load(cacheKey); ok {
+		return cached.(string)
+	}
+
+	// Perform normalization
+	result := text
 	if !f.caseSensitive {
-		text = strings.ToLower(text)
+		result = strings.ToLower(result)
 	}
 
 	if f.normalizeSpaces {
-		text = strings.TrimSpace(text)
-		text = strings.ReplaceAll(text, "\t", " ")
-		// Collapse multiple spaces into one
-		for strings.Contains(text, "  ") {
-			text = strings.ReplaceAll(text, "  ", " ")
-		}
+		result = strings.TrimSpace(result)
+		result = strings.ReplaceAll(result, "\t", " ")
+		// More efficient space collapse
+		result = strings.Join(strings.Fields(result), " ")
 	}
 
-	return text
+	// Cache the result
+	normalizeCache.Store(cacheKey, result)
+	return result
 }
 
 // calculateMatch calculates fuzzy match positions and score
