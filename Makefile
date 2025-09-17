@@ -57,7 +57,7 @@ build-all: ## Build binaries for all platforms
 # Testing
 test: ## Run all tests
 	@echo "Running tests..."
-	go test -v -race ./...
+	CGO_ENABLED=1 go test -v -race ./... 
 	@echo "✓ All tests passed"
 
 test-coverage: ## Run tests with coverage report
@@ -108,10 +108,6 @@ install: build ## Install taskopen to $GOPATH/bin
 	@echo "✓ $(BINARY_NAME) installed to $(shell go env GOPATH)/bin"
 
 # Development helpers
-watch: ## Watch for changes and rebuild (requires entr: apt-get install entr)
-	@which entr >/dev/null 2>&1 || (echo "❌ entr not found. Install with: apt-get install entr" && exit 1)
-	find . -name '*.go' | entr -r make build
-
 run: build ## Build and run taskopen with diagnostics
 	./$(BINARY_NAME) diagnostics
 
