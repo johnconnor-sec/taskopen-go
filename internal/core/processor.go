@@ -3,6 +3,7 @@ package core
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strings"
 	"time"
@@ -66,7 +67,21 @@ func (tp *TaskProcessor) ProcessTasks(ctx context.Context, filters []string, sin
 	}
 
 	if len(actionables) == 0 {
-		tp.formatter.Warning("No actionable items found")
+		if tp.config.General.NoAnnotationHook != "" && len(tasks) == 1 {
+			tp.formatter.Warning("No actionable items found")
+			taskEnv := tp.buildEnvironment(tasks[0])
+			result, err := tp.executor.Execute(ctx, "sh", []string{"-c", tp.config.General.NoAnnotationHook}, &exec.ExecutionOptions{Environment: taskEnv})
+			if err != nil {
+				tp.logger.Error("Failed executing no_annotation_hook", map[string]any{"command": tp.config.General.NoAnnotationHook, "error": err.Error()})
+				return errors.Wrap(err, errors.ActionExecution, "Failed to execute no_annotation_hook")
+			}
+
+			if result.ExitCode != 0 {
+				tp.logger.Error("no_annotation_hook exited with non-zero code", map[string]any{"command": tp.config.General.NoAnnotationHook, "exit_code": result.ExitCode})
+				return errors.New(errors.ActionExecution, fmt.Sprintf("no_annotation_hook failed with exit code %d", result.ExitCode))
+			}
+			return nil
+		}
 		return nil
 	}
 
@@ -85,11 +100,8 @@ func (tp *TaskProcessor) ProcessTasks(ctx context.Context, filters []string, sin
 
 // executeFilter runs a filter command and returns whether it passed
 func (tp *TaskProcessor) executeFilter(ctx context.Context, command string, env map[string]string) bool {
-	// Expand environment variables in command
 	expandedCommand := tp.expandEnvironmentVars(command, env)
-
 	result, err := tp.executor.Execute(ctx, "sh", []string{"-c", expandedCommand},
 		&exec.ExecutionOptions{Environment: env})
-
 	return err == nil && result.ExitCode == 0
 }
