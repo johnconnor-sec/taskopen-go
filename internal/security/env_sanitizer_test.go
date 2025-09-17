@@ -244,8 +244,7 @@ func BenchmarkIsSensitive(b *testing.B) {
 	sanitizer := NewEnvSanitizer()
 	testVars := []string{"HOME", "API_KEY", "DATABASE_PASSWORD", "TERM", "AWS_SECRET_KEY"}
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		for _, varName := range testVars {
 			sanitizer.IsSensitive(varName)
 		}
@@ -256,8 +255,7 @@ func BenchmarkSanitizeValue(b *testing.B) {
 	sanitizer := NewEnvSanitizer()
 	sanitizer.SetVisibilityLevel(VisibilityMasked)
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		sanitizer.SanitizeValue("API_KEY", "some_secret_value_here")
 		sanitizer.SanitizeValue("HOME", "/home/user")
 	}

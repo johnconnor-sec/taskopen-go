@@ -167,7 +167,7 @@ func (ep *EnvPreview) formatEnvVar(output *strings.Builder, envVar EnvVarInfo) {
 		nameDisplay = nameDisplay[:maxNameWidth-3] + "..."
 	}
 
-	output.WriteString(fmt.Sprintf("%s %-*s = %s\n", indicator, maxNameWidth, nameDisplay, envVar.Value))
+	fmt.Fprintf(output, "%s %-*s = %s\n", indicator, maxNameWidth, nameDisplay, envVar.Value)
 }
 
 // getVisibilityDescription returns a human-readable description of the current visibility level
@@ -223,7 +223,7 @@ func (ep *EnvPreview) GetSanitizer() *EnvSanitizer {
 }
 
 // GetStats returns statistics about environment variables
-func (ep *EnvPreview) GetStats() map[string]interface{} {
+func (ep *EnvPreview) GetStats() map[string]any {
 	allEnv := ep.sanitizer.GetAllSanitized()
 	safeCount := 0
 	sensitiveCount := 0
@@ -236,7 +236,7 @@ func (ep *EnvPreview) GetStats() map[string]interface{} {
 		}
 	}
 
-	return map[string]interface{}{
+	return map[string]any{
 		"total":      len(allEnv),
 		"safe":       safeCount,
 		"sensitive":  sensitiveCount,
