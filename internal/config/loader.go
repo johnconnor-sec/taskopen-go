@@ -55,29 +55,6 @@ func Load(configPath string) (*Config, error) {
 	return &config, nil
 }
 
-// LoadOrCreate attempts to load configuration, creating default if not found.
-func LoadOrCreate(configPath string) (*Config, error) {
-	// Try to load existing configuration
-	config, err := Load(configPath)
-	if err != nil {
-		// If config not found, create default
-		if errors.IsType(err, errors.ConfigNotFound) {
-			config = DefaultConfig()
-			config.ConfigPath = configPath
-
-			// Ask user if they want to create the config
-			if err := createConfigInteractively(configPath, config); err != nil {
-				return nil, err
-			}
-
-			return config, nil
-		}
-		return nil, err
-	}
-
-	return config, nil
-}
-
 // Save writes the configuration to the specified path.
 func Save(config *Config, configPath string) error {
 	// Ensure directory exists
@@ -99,27 +76,6 @@ func Save(config *Config, configPath string) error {
 	}
 
 	return nil
-}
-
-// createConfigInteractively prompts user to create configuration.
-func createConfigInteractively(configPath string, config *Config) error {
-	fmt.Printf("Configuration file '%s' does not exist.\n", configPath)
-	fmt.Print("Create default configuration? [Y/n]: ")
-
-	var answer string
-	fmt.Scanln(&answer)
-
-	// Default to yes if no answer provided
-	if answer == "" || answer == "y" || answer == "Y" {
-		if err := Save(config, configPath); err != nil {
-			return errors.Wrap(err, errors.ConfigNotFound, "Failed to create default configuration")
-		}
-		fmt.Printf("✓ Created default configuration at: %s\n", configPath)
-		return nil
-	}
-
-	return errors.New(errors.ConfigNotFound, "Configuration file required").
-		WithSuggestion("Run 'taskopen config init' to create configuration interactively")
 }
 
 // Validate validates a configuration file without loading it.

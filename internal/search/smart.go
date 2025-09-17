@@ -19,19 +19,6 @@ type SmartFuzzy struct {
 	frequencyData map[string]int
 }
 
-// NewSmartFuzzy creates an enhanced fuzzy matcher with intelligent ranking
-func NewSmartFuzzy() *SmartFuzzy {
-	return &SmartFuzzy{
-		Fuzzy:         NewFuzzy(),
-		contextBoosts: make(map[string]float64),
-		acronymBoost:  0.3,
-		pathBoost:     0.2,
-		urlBoost:      0.1,
-		recencyBoost:  0.15,
-		frequencyData: make(map[string]int),
-	}
-}
-
 // SetContextBoosts sets boost values for different contexts
 func (sf *SmartFuzzy) SetContextBoosts(boosts map[string]float64) *SmartFuzzy {
 	sf.contextBoosts = boosts
@@ -443,16 +430,6 @@ type ContextualSearch struct {
 	currentContext string
 }
 
-// NewContextualSearch creates a context-aware search instance
-func NewContextualSearch(project string, tags []string, context string) *ContextualSearch {
-	return &ContextualSearch{
-		SmartFuzzy:     NewSmartFuzzy(),
-		currentProject: project,
-		currentTags:    tags,
-		currentContext: context,
-	}
-}
-
 // Search performs contextual search with current taskwarrior state
 func (cs *ContextualSearch) Search(query string, items []SmartItem) []SmartMatch {
 	// Boost items that match current context
@@ -477,15 +454,6 @@ type PredictiveSearch struct {
 	*SmartFuzzy
 	index       map[string][]SmartItem
 	minQueryLen int
-}
-
-// NewPredictiveSearch creates a search engine with autocomplete
-func NewPredictiveSearch() *PredictiveSearch {
-	return &PredictiveSearch{
-		SmartFuzzy:  NewSmartFuzzy(),
-		index:       make(map[string][]SmartItem),
-		minQueryLen: 2,
-	}
 }
 
 // BuildIndex creates search index for fast predictions

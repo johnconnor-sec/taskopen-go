@@ -210,21 +210,3 @@ func parseCLISection(config *Config, key, value string, aliasGroupRegex *regexp.
 		}
 	}
 }
-
-// BackupINI creates a backup of the INI file before migration.
-func BackupINI(iniPath string) (string, error) {
-	backupPath := iniPath + ".backup"
-
-	// Read original file
-	data, err := os.ReadFile(iniPath)
-	if err != nil {
-		return "", err
-	}
-
-	// Write backup
-	if err := os.WriteFile(backupPath, data, 0644); err != nil {
-		return "", err
-	}
-
-	return backupPath, nil
-}

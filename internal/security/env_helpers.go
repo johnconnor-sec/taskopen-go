@@ -30,18 +30,6 @@ func GetEnvPreview(options EnvPreviewOptions) string {
 	return preview.GeneratePreview()
 }
 
-// GetDefaultEnvPreview returns a preview with safe defaults
-func GetDefaultEnvPreview() string {
-	return GetEnvPreview(DefaultEnvPreviewOptions())
-}
-
-// AddSensitiveEnvPattern adds a custom pattern for sensitive environment variables
-func AddSensitiveEnvPattern(pattern string, replacement, description string) error {
-	// This is a simplified version - in a full implementation you'd compile the regex
-	// For now, we'll just add it to the global sanitizer if needed
-	return nil
-}
-
 // MarkEnvAsSafe marks an environment variable as safe to display
 func MarkEnvAsSafe(name string) {
 	SecureEnv.AddSafeVar(name)
@@ -55,10 +43,4 @@ func MarkEnvAsUnsafe(name string) {
 // IsEnvSensitive checks if an environment variable is considered sensitive
 func IsEnvSensitive(name string) bool {
 	return SecureEnv.IsSensitive(name)
-}
-
-// GetEnvStats returns statistics about environment variables
-func GetEnvStats() map[string]interface{} {
-	preview := NewEnvPreview(DefaultEnvPreviewOptions())
-	return preview.GetStats()
 }

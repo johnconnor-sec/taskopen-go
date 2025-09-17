@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"regexp"
 	"strings"
 	"time"
 
@@ -112,36 +111,6 @@ func (c *Client) Version(ctx context.Context) (string, error) {
 	return strings.TrimSpace(result.Stdout), nil
 }
 
-// CurrentContext returns the currently active Taskwarrior context.
-func (c *Client) CurrentContext(ctx context.Context) (string, error) {
-	args := append(c.taskArgs, "context", "show")
-
-	result, err := c.executor.Execute(ctx, c.taskBinary, args, nil)
-	if err != nil {
-		return "", errors.Wrap(err, errors.TaskwarriorQuery, "Failed to get current context")
-	}
-
-	if result.ExitCode != 0 {
-		return "", errors.New(errors.TaskwarriorQuery, "Failed to get current context").
-			WithDetails(fmt.Sprintf("Exit code: %d, stderr: %s", result.ExitCode, result.Stderr))
-	}
-
-	// Parse context from output
-	contextRegex1 := regexp.MustCompile(`.*with filter '(.*)' is currently applied\.$`)
-	contextRegex2 := regexp.MustCompile(`.*read filter: '(.*)'$`)
-
-	for line := range strings.SplitSeq(result.Stdout, "\n") {
-		if matches := contextRegex1.FindStringSubmatch(line); matches != nil {
-			return fmt.Sprintf("\\(%s\\)", matches[1]), nil
-		}
-		if matches := contextRegex2.FindStringSubmatch(line); matches != nil {
-			return fmt.Sprintf("\\(%s\\)", matches[1]), nil
-		}
-	}
-
-	return "", nil
-}
-
 // Export retrieves tasks in JSON format using streaming for large datasets.
 func (c *Client) Export(ctx context.Context, filters []string) ([]Task, error) {
 	args := append(c.taskArgs, filters...)
@@ -165,119 +134,6 @@ func (c *Client) Export(ctx context.Context, filters []string) ([]Task, error) {
 	return c.parseTasksJSON(result.Stdout)
 }
 
-// ExportStream retrieves tasks using streaming JSON parser for large datasets.
-func (c *Client) ExportStream(ctx context.Context, filters []string) (<-chan Task, <-chan error) {
-	taskChan := make(chan Task, 100)
-	errorChan := make(chan error, 1)
-
-	go func() {
-		defer close(taskChan)
-		defer close(errorChan)
-
-		args := append(c.taskArgs, filters...)
-		args = append(args, "export")
-
-		// Stream output line by line
-		outputChan, execErrorChan := c.executor.ExecuteStream(ctx, c.taskBinary, args, nil)
-
-		var jsonBuffer strings.Builder
-		var bracketCount int
-		var inString bool
-		var escaped bool
-
-		for {
-			select {
-			case line, ok := <-outputChan:
-				if !ok {
-					// Process any remaining JSON in buffer
-					if jsonBuffer.Len() > 0 {
-						tasks, err := c.parseTasksJSON(jsonBuffer.String())
-						if err != nil {
-							errorChan <- err
-							return
-						}
-
-						for _, task := range tasks {
-							select {
-							case taskChan <- task:
-							case <-ctx.Done():
-								return
-							}
-						}
-					}
-					return
-				}
-
-				// Remove prefix if present (from streaming)
-				if after, ok0 := strings.CutPrefix(line, "[stdout] "); ok0 {
-					line = after
-				}
-
-				// Buffer the line for JSON parsing
-				jsonBuffer.WriteString(line)
-				jsonBuffer.WriteRune('\n')
-
-				// Simple JSON bracket counting to detect complete JSON objects
-				for _, char := range line {
-					switch char {
-					case '"':
-						if !escaped {
-							inString = !inString
-						}
-						escaped = false
-					case '\\':
-						escaped = !escaped && inString
-					case '[':
-						if !inString {
-							bracketCount++
-						}
-						escaped = false
-					case ']':
-						if !inString {
-							bracketCount--
-							if bracketCount == 0 {
-								// Complete JSON array, parse it
-								tasks, err := c.parseTasksJSON(jsonBuffer.String())
-								if err != nil {
-									errorChan <- err
-									return
-								}
-
-								// Send tasks to channel
-								for _, task := range tasks {
-									select {
-									case taskChan <- task:
-									case <-ctx.Done():
-										return
-									}
-								}
-
-								// Reset buffer
-								jsonBuffer.Reset()
-							}
-						}
-						escaped = false
-					default:
-						escaped = false
-					}
-				}
-
-			case err := <-execErrorChan:
-				if err != nil {
-					errorChan <- errors.Wrap(err, errors.TaskwarriorQuery, "Failed to stream task export")
-					return
-				}
-
-			case <-ctx.Done():
-				errorChan <- ctx.Err()
-				return
-			}
-		}
-	}()
-
-	return taskChan, errorChan
-}
-
 // Query executes a Taskwarrior query and returns matching tasks.
 func (c *Client) Query(ctx context.Context, filters []string) ([]Task, error) {
 	// Add status:pending by default if no status filter provided
@@ -294,22 +150,6 @@ func (c *Client) Query(ctx context.Context, filters []string) ([]Task, error) {
 	}
 
 	return c.Export(ctx, filters)
-}
-
-// GetTask retrieves a specific task by UUID.
-func (c *Client) GetTask(ctx context.Context, uuid string) (*Task, error) {
-	tasks, err := c.Export(ctx, []string{fmt.Sprintf("uuid:%s", uuid)})
-	if err != nil {
-		return nil, err
-	}
-
-	if len(tasks) == 0 {
-		return nil, errors.New(errors.TaskwarriorQuery, "Task not found").
-			WithDetails(fmt.Sprintf("UUID: %s", uuid)).
-			WithSuggestion("Verify the task UUID is correct")
-	}
-
-	return &tasks[0], nil
 }
 
 // parseTasksJSON parses JSON output from Taskwarrior into Task structs.
@@ -345,32 +185,6 @@ func (c *Client) parseTasksJSON(jsonData string) ([]Task, error) {
 	}
 
 	return tasks, nil
-}
-
-// CheckTaskwarrior verifies that Taskwarrior is available and functional.
-func CheckTaskwarrior(ctx context.Context, taskBinary string) error {
-	client := NewClient(taskBinary, []string{}, 10*time.Second)
-
-	version, err := client.Version(ctx)
-	if err != nil {
-		return err
-	}
-
-	if version == "" {
-		return errors.New(errors.TaskwarriorNotFound, "Taskwarrior version is empty").
-			WithSuggestion("Ensure Taskwarrior is properly installed")
-	}
-
-	// Validate version format (should be like "3.4.1" or "2.6.0")
-	versionPattern := `^\d+\.\d+(\.\d+)?$`
-	matched, _ := regexp.MatchString(versionPattern, version)
-	if !matched {
-		return errors.New(errors.TaskwarriorNotFound, "Invalid Taskwarrior version format").
-			WithDetails(fmt.Sprintf("Got version: %s", version)).
-			WithSuggestion("Ensure a proper Taskwarrior binary is configured")
-	}
-
-	return nil
 }
 
 // min returns the minimum of two integers.

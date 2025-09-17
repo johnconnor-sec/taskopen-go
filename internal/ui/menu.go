@@ -1147,57 +1147,10 @@ func (m *Menu) getKey() (KeyEvent, error) {
 	}
 }
 
-// ShowSimpleMenu shows a simplified menu for non-interactive environments
-func ShowSimpleMenu(items []MenuItem, title string) (*MenuItem, error) {
-	formatter := output.NewFormatter(os.Stdout)
-
-	formatter.Header(title)
-
-	// Show numbered options
-	for i, item := range items {
-		if item.Disabled {
-			continue
-		}
-
-		marker := fmt.Sprintf("%d.", i+1)
-		line := fmt.Sprintf("%-3s %s", marker, item.Text)
-
-		if item.Description != "" {
-			line += fmt.Sprintf(" - %s", item.Description)
-		}
-
-		formatter.List("%s", line)
-	}
-
-	fmt.Println()
-	fmt.Print("Select option (number): ")
-
-	var choice int
-	_, err := fmt.Scanf("%d", &choice)
-	if err != nil {
-		return nil, fmt.Errorf("invalid input: %w", err)
-	}
-
-	choice-- // Convert to 0-based index
-	if choice < 0 || choice >= len(items) || items[choice].Disabled {
-		return nil, fmt.Errorf("invalid selection")
-	}
-
-	return &items[choice], nil
-}
-
 // MultiSelect allows multiple item selection
 type MultiSelect struct {
 	menu     *Menu
 	selected map[int]bool
-}
-
-// NewMultiSelect creates a new multi-select menu
-func NewMultiSelect(items []MenuItem, config MenuConfig) *MultiSelect {
-	return &MultiSelect{
-		menu:     NewMenu(items, config),
-		selected: make(map[int]bool),
-	}
 }
 
 // Show displays the multi-select menu
@@ -1209,46 +1162,4 @@ func (ms *MultiSelect) Show() ([]MenuItem, error) {
 		return nil, err
 	}
 	return []MenuItem{*item}, nil
-}
-
-// CreateActionsMenu creates a menu for taskopen actions
-func CreateActionsMenu(actions map[string]any) []MenuItem {
-	var items []MenuItem
-
-	for name, action := range actions {
-		items = append(items, MenuItem{
-			ID:          name,
-			Text:        name,
-			Description: fmt.Sprintf("Action: %v", action),
-			Data:        action,
-		})
-	}
-
-	return items
-}
-
-// CreateTaskMenu creates a menu for taskwarrior tasks
-func CreateTaskMenu(tasks []map[string]any) []MenuItem {
-	var items []MenuItem
-
-	for i, task := range tasks {
-		description := "No description"
-		if desc, ok := task["description"].(string); ok {
-			description = desc
-		}
-
-		status := "pending"
-		if s, ok := task["status"].(string); ok {
-			status = s
-		}
-
-		items = append(items, MenuItem{
-			ID:          fmt.Sprintf("task-%d", i),
-			Text:        description,
-			Description: fmt.Sprintf("Status: %s", status),
-			Data:        task,
-		})
-	}
-
-	return items
 }
