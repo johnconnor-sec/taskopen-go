@@ -176,7 +176,6 @@ func runDiagnostics() error {
 	fmt.Println(envPreview)
 
 	fmt.Println()
-	formatter.Info("🎉 EPOCH 2 Sprint 4 Complete - Enhanced Output & Accessibility!")
 
 	return nil
 }
