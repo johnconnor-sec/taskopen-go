@@ -73,7 +73,7 @@ func GenerateJSONSchema() ([]byte, error) {
 					"no_annotation_hook": map[string]any{
 						"type":        "string",
 						"description": "Command to run for tasks without annotations",
-						"default":     "annotate $ID",
+						"default":     "task $ID annotate",
 					},
 
 					"sort": map[string]any{

@@ -246,7 +246,7 @@ general:
   taskbin: "task"
   taskargs: []
   task_attributes: "priority,project,tags,description"
-  no_annotation_hook: "annotate $ID"
+  no_annotation_hook: "task $ID annotate"
   sort: "urgency-,annot"
   base_filter: "+PENDING"
   debug: false
